@@ -1,9 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
-import path from 'path'
 
 export default defineConfig({
+  base: '/sakan-dz/',
   plugins: [
     react(),
     VitePWA({
@@ -18,11 +18,11 @@ export default defineConfig({
         display: 'standalone',
         dir: 'ltr',
         lang: 'fr',
-        start_url: '/',
-        scope: '/',
+        start_url: '/sakan-dz/',
+        scope: '/sakan-dz/',
         icons: [
           {
-            src: '/favicon.svg',
+            src: '/sakan-dz/favicon.svg',
             sizes: 'any',
             type: 'image/svg+xml',
           },
@@ -59,7 +59,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': '/src',
     },
   },
   server: {
