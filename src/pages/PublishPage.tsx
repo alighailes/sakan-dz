@@ -37,6 +37,26 @@ const LEGAL_OPTIONS = [
   { value: 'papier_timbre', labelAr: 'ورقة عرفية', labelFr: 'Papier timbré' },
 ]
 
+// Surface the exact PostgREST/Supabase server message (plus details, hint
+// and code when present) instead of a generic string, so schema mismatches
+// are directly diagnosable from the UI.
+function formatPublishError(err: unknown): string {
+  if (err && typeof err === 'object') {
+    const record = err as Record<string, unknown>
+    const message = typeof record.message === 'string' ? record.message : null
+    if (message) {
+      const extras = [
+        typeof record.details === 'string' && record.details ? record.details : null,
+        typeof record.hint === 'string' && record.hint ? record.hint : null,
+        typeof record.code === 'string' && record.code ? `code ${record.code}` : null,
+      ].filter(Boolean)
+      return extras.length > 0 ? `${message} (${extras.join(' · ')})` : message
+    }
+  }
+  if (err instanceof Error && err.message) return err.message
+  return 'Failed to publish'
+}
+
 export function PublishPage() {
   const navigate = useNavigate()
   const { locale, t } = useLocale()
@@ -142,6 +162,9 @@ export function PublishPage() {
       // 2. Insert the listing into public.properties.
       // Wilaya / commune are stored by their canonical French names so that
       // listings stay standardized no matter which UI locale was used.
+      // NOTE: the table's area column is named `surface` — sending `area`
+      // would fail PostgREST schema validation (PGRST204), so only `surface`
+      // is sent.
       const wilayaName = getWilayaByCode(wilayaCode)?.name_fr ?? ''
       const { error } = await supabase.from('properties').insert({
         title: sanitizeText(title),
@@ -154,7 +177,6 @@ export function PublishPage() {
         wilaya: wilayaName,
         commune: sanitizeText(commune),
         surface: Number(surface),
-        area: Number(surface),
         rooms: Number(rooms),
         bedrooms: Number(rooms),
         bathrooms: Number(bathrooms),
@@ -178,7 +200,7 @@ export function PublishPage() {
       setTimeout(() => navigate('/listings'), 800)
     } catch (err) {
       console.error('Failed to publish:', err)
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to publish')
+      setErrorMsg(formatPublishError(err))
     } finally {
       setSubmitting(false)
     }
