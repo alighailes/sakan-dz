@@ -43,7 +43,7 @@ export function ChatWidget() {
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'fixed bottom-24 right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-all md:bottom-6 md:right-6',
+          'fixed bottom-20 right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-all md:bottom-6 md:right-6',
           isOpen
             ? 'bg-gray-600 text-white'
             : 'bg-primary-600 text-white hover:bg-primary-700'
@@ -54,7 +54,7 @@ export function ChatWidget() {
 
       {/* Chat Panel */}
       {isOpen && (
-        <div className="fixed bottom-40 right-4 z-50 w-[360px] max-w-[calc(100vw-2rem)] rounded-2xl bg-white shadow-soft-lg dark:bg-gray-900 animate-slide-up md:bottom-24 md:right-6">
+        <div className="fixed bottom-36 right-4 z-50 w-[360px] max-w-[calc(100vw-2rem)] rounded-2xl bg-white shadow-soft-lg dark:bg-gray-900 animate-slide-up md:bottom-24 md:right-6">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700">
             <div className="flex items-center gap-3">

@@ -104,10 +104,15 @@ export const LEGAL_STATUS: { value: LegalStatus; labelFr: string; labelAr: strin
 export const CURRENCIES = ['DZD', 'EUR', 'USD'] as const
 
 // ============================================================
-// Map defaults
+// Map defaults — centered on Algeria with constrained bounds
 // ============================================================
-export const MAP_DEFAULT_CENTER: [number, number] = [28.0339, 1.6596] // Center of Algeria
+export const MAP_DEFAULT_CENTER: [number, number] = [35.6987, 3.0588] // Center of Algeria
 export const MAP_DEFAULT_ZOOM = 6
+export const MAP_MAX_BOUNDS: [[number, number], [number, number]] = [
+  [18.9, -8.7], // South-West (covers Tamanrasset / Tindouf)
+  [37.3, 12.0], // North-East (covers Annaba / Djanet)
+]
+export const MAP_MIN_ZOOM = 5
 
 // ============================================================
 // Pagination

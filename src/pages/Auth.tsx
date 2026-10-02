@@ -125,7 +125,7 @@ export function AuthPage() {
   const getError = (key: string) => errors[key]
 
   return (
-    <div className="flex min-h-[80vh] items-center justify-center px-4 py-12">
+    <div className="flex min-h-[85vh] items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="mb-8 text-center">

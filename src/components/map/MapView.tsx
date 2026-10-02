@@ -9,7 +9,7 @@ import { useSearchStore } from '@/stores/searchStore'
 import { useLocale } from '@/i18n'
 import { getTileLayerUrl, getTileLayerAttribution, createPriceIcon, propertyToMarker } from '@/lib/mapHelpers'
 import { filterPropertiesByPolygon } from '@/lib/geoUtils'
-import { MAP_DEFAULT_CENTER, MAP_DEFAULT_ZOOM } from '@/constants'
+import { MAP_DEFAULT_CENTER, MAP_DEFAULT_ZOOM, MAP_MAX_BOUNDS, MAP_MIN_ZOOM } from '@/constants'
 import { formatPrice, getOperationLabelFr } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { SaveSearchButton } from '@/components/SaveSearchButton'
@@ -337,9 +337,9 @@ export function MapView() {
         </Button>
       </div>
 
-      {/* Draw & Save Search Buttons */}
+      {/* Draw & Save Search Buttons — lifted above mobile bottom nav */}
       {!showResults && (
-        <div className="absolute bottom-8 left-1/2 z-[1000] flex -translate-x-1/2 gap-2">
+        <div className="absolute bottom-20 left-1/2 z-[1000] flex -translate-x-1/2 gap-2">
           <Button
             onClick={isDrawing ? stopDrawing : startDrawing}
             className={cn(
@@ -393,8 +393,8 @@ export function MapView() {
         </div>
       )}
 
-      {/* Map Legend */}
-      <div className="glass-strong absolute bottom-4 left-4 z-[1000] rounded-xl p-3 shadow-soft-lg">
+      {/* Map Legend — lifted above mobile bottom nav */}
+      <div className="glass-strong absolute bottom-20 left-4 z-[1000] rounded-xl p-3 shadow-soft-lg">
         <p className="mb-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300">{t.map.title}</p>
         <div className="flex items-center gap-3 text-xs text-zinc-600 dark:text-zinc-400">
           <div className="flex items-center gap-1">
@@ -424,6 +424,10 @@ export function MapView() {
       <MapContainer
         center={MAP_DEFAULT_CENTER}
         zoom={MAP_DEFAULT_ZOOM}
+        minZoom={MAP_MIN_ZOOM}
+        maxBounds={MAP_MAX_BOUNDS}
+        maxBoundsViscosity={1.0}
+        worldCopyJump={false}
         className="h-full w-full"
         ref={mapRef}
         zoomControl={false}
@@ -493,9 +497,9 @@ export function MapView() {
         })}
       </MapContainer>
 
-      {/* Selected Property Panel */}
+      {/* Selected Property Panel — lifted above mobile bottom nav */}
       {selectedProperty && (
-        <div className="glass-strong absolute bottom-4 right-4 z-[1000] w-80 rounded-2xl p-4 shadow-soft-xl animate-slide-up">
+        <div className="glass-strong absolute bottom-20 right-4 z-[1000] w-80 max-w-[calc(100vw-2rem)] rounded-2xl p-4 shadow-soft-xl animate-slide-up">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <h3 className="text-sm font-semibold text-zinc-900 dark:text-white line-clamp-2">
