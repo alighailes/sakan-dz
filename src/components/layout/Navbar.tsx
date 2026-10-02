@@ -14,10 +14,10 @@ export function Navbar() {
   const userMenuRef = useRef<HTMLDivElement>(null)
   const { theme, toggleTheme } = useThemeStore()
   const { locale, setLocale, t } = useLocale()
-  const { user, profile, signOut, updateRole } = useAuthStore()
+  const { user, profile, signOut, updateRole, activeRole } = useAuthStore()
   const location = useLocation()
   const navigate = useNavigate()
-  const isSeller = profile?.role === 'seller'
+  const isSeller = activeRole === 'seller'
 
   const navLinks = [
     { to: '/', label: t.nav.home, icon: Home },
@@ -342,7 +342,7 @@ export function Navbar() {
                       onClick={() => updateRole(role)}
                       className={cn(
                         'rounded-lg px-3 py-2 text-xs font-bold transition-all',
-                        (profile?.role ?? 'buyer') === role
+                        (activeRole ?? 'buyer') === role
                           ? 'bg-primary-600 text-white shadow-sm'
                           : 'bg-white text-zinc-500 hover:text-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200'
                       )}

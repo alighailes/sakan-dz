@@ -10,7 +10,7 @@ import type { UserRole } from '@/types'
  * has no role set yet. Choosing a role persists it (Supabase + local store).
  */
 export function RoleOnboardingModal() {
-  const { user, profile, loading, updateRole } = useAuthStore()
+  const { user, activeRole, loading, updateRole } = useAuthStore()
   const { t } = useLocale()
   const [dismissed, setDismissed] = useState(false)
   const [saving, setSaving] = useState<UserRole | null>(null)
@@ -18,7 +18,7 @@ export function RoleOnboardingModal() {
 
   // Closes once a choice is persisted, even if the profile row itself
   // hasn't materialized yet (role is merged back via stored fallback).
-  if (loading || !user || profile?.role || dismissed || saved) return null
+  if (loading || !user || activeRole || dismissed || saved) return null
 
   const choose = async (role: UserRole) => {
     setSaving(role)

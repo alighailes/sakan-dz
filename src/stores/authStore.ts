@@ -40,6 +40,8 @@ interface AuthState {
   loading: boolean
   error: string | null
   isMockMode: boolean
+  /** Canonical buyer/seller UI mode. Seeded synchronously from localStorage. */
+  activeRole: UserRole | null
 
   initialize: () => Promise<void>
   signUp: (email: string, password: string, metadata: SignUpMetadata) => Promise<void>
@@ -141,11 +143,33 @@ function clearActiveRole() {
   }
 }
 
-/** Merge a locally stored role into a profile that has none yet. */
-function withRole(profile: UserProfile | null, userId: string | undefined): UserProfile | null {
-  if (!profile || profile.role || !userId) return profile
-  const stored = getStoredRole(userId)
-  return stored ? { ...profile, role: stored } : profile
+/**
+ * Resolve the canonical UI role without ever resetting it to a default.
+ * Precedence: Supabase profile.role (mirrored to storage immediately) >
+ * stored per-user/global role > current in-memory value (survives loading
+ * and refetches). Returns null only when nothing is known yet.
+ */
+function resolveActiveRole(
+  serverRole: unknown,
+  userId: string | undefined,
+  current: UserRole | null
+): UserRole | null {
+  if (serverRole === 'buyer' || serverRole === 'seller') {
+    if (userId) setStoredRole(userId, serverRole)
+    else {
+      try {
+        localStorage.setItem(ACTIVE_ROLE_KEY, serverRole)
+      } catch {
+        // ignore
+      }
+    }
+    return serverRole
+  }
+  if (userId) {
+    const stored = getStoredRole(userId)
+    if (stored) return stored
+  }
+  return current
 }
 
 function createMockUser(mockUser: MockUser): User {
@@ -194,6 +218,9 @@ export const useAuthStore = create<AuthState>()(
       loading: true,
       error: null,
       isMockMode: false,
+      // Synchronous initial read: valid stored role wins, otherwise null
+      // (consumers fall back to buyer UI until a role is known).
+      activeRole: readRoleKey(ACTIVE_ROLE_KEY) ?? null,
 
       // Initialize auth state
       initialize: async () => {
@@ -214,10 +241,11 @@ export const useAuthStore = create<AuthState>()(
 
               set({
                 user: session.user,
-                profile: withRole(profile || null, session.user.id),
+                profile: profile || null,
                 session,
                 loading: false,
                 isMockMode: false,
+                activeRole: resolveActiveRole(profile?.role, session.user.id, get().activeRole),
               })
             } else {
               set({ user: null, profile: null, session: null, loading: false, isMockMode: false })
@@ -234,9 +262,10 @@ export const useAuthStore = create<AuthState>()(
 
                 set({
                   user: newSession.user,
-                  profile: withRole(profile || null, newSession.user.id),
+                  profile: profile || null,
                   session: newSession,
                   isMockMode: false,
+                  activeRole: resolveActiveRole(profile?.role, newSession.user.id, get().activeRole),
                 })
               } else if (event === 'SIGNED_OUT') {
                 set({ user: null, profile: null, session: null, isMockMode: false })
@@ -253,10 +282,11 @@ export const useAuthStore = create<AuthState>()(
           if (mockSession) {
             set({
               user: createMockUser(mockSession.user),
-              profile: withRole(mockSession.user.profile, mockSession.user.id),
+              profile: mockSession.user.profile,
               session: createMockSession(mockSession.user),
               loading: false,
               isMockMode: true,
+              activeRole: resolveActiveRole(mockSession.user.profile.role, mockSession.user.id, get().activeRole),
             })
           } else {
             set({ user: null, profile: null, session: null, loading: false, isMockMode: true })
@@ -303,10 +333,11 @@ export const useAuthStore = create<AuthState>()(
 
             set({
               user: data.user,
-              profile: withRole({ ...profile, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }, data.user.id),
+              profile: { ...profile, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
               session: data.session,
               loading: false,
               isMockMode: false,
+              activeRole: resolveActiveRole(profile?.role, data.user.id, get().activeRole),
             })
           }
         } else {
@@ -344,10 +375,11 @@ export const useAuthStore = create<AuthState>()(
 
           set({
             user: createMockUser(newUser),
-            profile: withRole(newUser.profile, newUser.id),
+            profile: newUser.profile,
             session: createMockSession(newUser),
             loading: false,
             isMockMode: true,
+            activeRole: resolveActiveRole(newUser.profile.role, newUser.id, get().activeRole),
           })
         }
       },
@@ -376,10 +408,11 @@ export const useAuthStore = create<AuthState>()(
 
             set({
               user: data.user,
-              profile: withRole(profile || null, data.user.id),
+              profile: profile || null,
               session: data.session,
               loading: false,
               isMockMode: false,
+              activeRole: resolveActiveRole(profile?.role, data.user.id, get().activeRole),
             })
           }
         } else {
@@ -401,10 +434,11 @@ export const useAuthStore = create<AuthState>()(
 
           set({
             user: createMockUser(found),
-            profile: withRole(found.profile, found.id),
+            profile: found.profile,
             session: createMockSession(found),
             loading: false,
             isMockMode: true,
+            activeRole: resolveActiveRole(found.profile.role, found.id, get().activeRole),
           })
         }
       },
@@ -422,7 +456,7 @@ export const useAuthStore = create<AuthState>()(
         // Drop the device-level active role so a different account signing in
         // next does not inherit it (per-user keys + server column remain).
         clearActiveRole()
-        set({ user: null, profile: null, session: null, loading: false })
+        set({ user: null, profile: null, session: null, loading: false, activeRole: null })
       },
 
       // Update profile
@@ -461,6 +495,12 @@ export const useAuthStore = create<AuthState>()(
 
           set({ profile: { ...profile, ...updates }, loading: false })
         }
+
+        // Keep the canonical role in sync if a role arrived via profile update
+        if (updates.role === 'buyer' || updates.role === 'seller') {
+          set({ activeRole: updates.role })
+          setStoredRole(user.id, updates.role)
+        }
       },
 
       // Update buyer/seller UI role (instant local update + Supabase persist)
@@ -468,7 +508,7 @@ export const useAuthStore = create<AuthState>()(
         const { user, profile, isMockMode } = get()
         if (!user) return
 
-        set({ profile: profile ? { ...profile, role } : profile })
+        set({ profile: profile ? { ...profile, role } : profile, activeRole: role })
         setStoredRole(user.id, role)
 
         if (isMockMode) {

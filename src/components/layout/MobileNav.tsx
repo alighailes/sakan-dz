@@ -13,9 +13,9 @@ interface TabDef {
 export function MobileNav() {
   const location = useLocation()
   const { t } = useLocale()
-  const { user, profile } = useAuthStore()
+  const { user, activeRole } = useAuthStore()
 
-  const isSeller = profile?.role === 'seller'
+  const isSeller = activeRole === 'seller'
   // NOTE: /annonces, /carte, /favoris, /profile and /dashboard do not exist as
   // routes — every target below is mapped to its real equivalent.
   const accountTo = user ? '/my-listings' : '/auth'
