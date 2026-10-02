@@ -14,13 +14,17 @@ export function RoleOnboardingModal() {
   const { t } = useLocale()
   const [dismissed, setDismissed] = useState(false)
   const [saving, setSaving] = useState<UserRole | null>(null)
+  const [saved, setSaved] = useState(false)
 
-  if (loading || !user || profile?.role || dismissed) return null
+  // Closes once a choice is persisted, even if the profile row itself
+  // hasn't materialized yet (role is merged back via stored fallback).
+  if (loading || !user || profile?.role || dismissed || saved) return null
 
   const choose = async (role: UserRole) => {
     setSaving(role)
     try {
       await updateRole(role)
+      setSaved(true)
     } finally {
       setSaving(null)
     }

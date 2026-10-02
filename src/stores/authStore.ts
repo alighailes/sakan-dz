@@ -108,21 +108,36 @@ function clearMockSession() {
 
 // Role fallback persisted per user (used when profiles.role column is absent)
 const ROLE_STORAGE_PREFIX = 'sakan-user-role'
+// Global active-role key: written on every switch, read on init before 'buyer'
+const ACTIVE_ROLE_KEY = 'sakan_active_role'
 
-function getStoredRole(userId: string): UserRole | undefined {
+function readRoleKey(key: string): UserRole | undefined {
   try {
-    const raw = localStorage.getItem(`${ROLE_STORAGE_PREFIX}:${userId}`)
+    const raw = localStorage.getItem(key)
     return raw === 'buyer' || raw === 'seller' ? raw : undefined
   } catch {
     return undefined
   }
 }
 
+function getStoredRole(userId: string): UserRole | undefined {
+  return readRoleKey(`${ROLE_STORAGE_PREFIX}:${userId}`) ?? readRoleKey(ACTIVE_ROLE_KEY)
+}
+
 function setStoredRole(userId: string, role: UserRole) {
   try {
     localStorage.setItem(`${ROLE_STORAGE_PREFIX}:${userId}`, role)
+    localStorage.setItem(ACTIVE_ROLE_KEY, role)
   } catch {
     // Storage unavailable — in-memory profile value still applies
+  }
+}
+
+function clearActiveRole() {
+  try {
+    localStorage.removeItem(ACTIVE_ROLE_KEY)
+  } catch {
+    // ignore
   }
 }
 
@@ -404,6 +419,9 @@ export const useAuthStore = create<AuthState>()(
           clearMockSession()
         }
 
+        // Drop the device-level active role so a different account signing in
+        // next does not inherit it (per-user keys + server column remain).
+        clearActiveRole()
         set({ user: null, profile: null, session: null, loading: false })
       },
 
