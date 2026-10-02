@@ -114,7 +114,7 @@ export function HeroSearch() {
         </p>
 
         {/* Floating Glass Search Island — bounded centered card */}
-        <form onSubmit={handleSearch} className="mx-auto mt-10 w-full min-w-0 max-w-xl sm:px-0">
+        <form onSubmit={handleSearch} className="mx-auto mt-10 w-full min-w-0 max-w-xl sm:px-0 md:max-w-2xl">
           <div className="glass-strong box-border w-full min-w-0 overflow-hidden rounded-2xl p-2 shadow-soft-xl">
             {/* Operation Toggle Pills — horizontally scrollable on narrow screens */}
             <div className="flex w-full min-w-0 items-center gap-2 overflow-x-auto no-scrollbar scrollbar-hide px-2 pb-2">
@@ -151,10 +151,10 @@ export function HeroSearch() {
               })}
             </div>
 
-            {/* Search Input Group — stacks until lg so sm screens never crowd */}
-            <div className="flex w-full min-w-0 flex-col gap-2 lg:flex-row">
+            {/* Search Input Group — vertical stack on mobile, horizontal from md up */}
+            <div className="flex w-full min-w-0 flex-col gap-2 md:flex-row">
               {/* Wilaya Select — populated from the Algeria locations dataset */}
-              <div className="relative lg:w-44">
+              <div className="relative min-w-0 md:w-44 md:shrink-0">
                 <select
                   value={wilayaId}
                   onChange={(e) => handleWilayaChange(e.target.value ? Number(e.target.value) : '')}
@@ -171,7 +171,7 @@ export function HeroSearch() {
               </div>
 
               {/* Commune Select — dependent on the selected wilaya */}
-              <div className="relative lg:w-44">
+              <div className="relative min-w-0 md:w-44 md:shrink-0">
                 <select
                   value={commune}
                   onChange={(e) => setCommune(e.target.value)}
@@ -202,8 +202,8 @@ export function HeroSearch() {
                 />
               </div>
 
-              {/* Search Button */}
-              <Button type="submit" size="lg" className="h-11 w-full lg:w-auto">
+              {/* Search Button — full width on mobile, auto from md up */}
+              <Button type="submit" size="lg" className="h-auto w-full py-3.5 md:h-11 md:w-auto md:shrink-0 md:py-0">
                 <Search className="h-4 w-4" />
                 {t.hero.search}
               </Button>
