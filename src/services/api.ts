@@ -152,6 +152,10 @@ export async function fetchProperties(filters?: SearchFilters): Promise<Property
   if (filters?.wilayaId !== undefined && filters?.wilayaId !== null) {
     properties = properties.filter((p) => Number(p.wilayaId) === Number(filters.wilayaId))
   }
+  if (filters?.commune) {
+    const target = String(filters.commune).toLowerCase().trim()
+    properties = properties.filter((p) => String(p.commune || '').toLowerCase().trim() === target)
+  }
   if (filters?.minBedrooms !== undefined && filters?.minBedrooms !== null && Number(filters.minBedrooms) > 0) {
     properties = properties.filter((p) => Number(p.bedrooms) >= Number(filters.minBedrooms))
   }

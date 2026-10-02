@@ -20,6 +20,9 @@ export function ListingsPage() {
     const wilaya = searchParams.get('wilaya')
     if (wilaya) filters.wilayaId = Number(wilaya)
 
+    const commune = searchParams.get('commune')
+    if (commune) filters.commune = commune
+
     const operation = searchParams.get('operation')
     if (operation) {
       filters.operationType = operation as 'rent' | 'sale' | 'vacation' | 'colocation'

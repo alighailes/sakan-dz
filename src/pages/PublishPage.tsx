@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { useLocale } from '@/i18n'
+import { WILAYAS_58, getWilayaByCode, getCommunesByWilaya, wilayaLabel, communeLabel, communeValue } from '@/data/algeria-locations'
 import { useAuth } from '../contexts/AuthContext'
 import { uploadPropertyImages } from '../services/storage'
 import { supabase } from '@/lib/supabase'
@@ -47,7 +48,7 @@ export function PublishPage() {
   const [operation, setOperation] = useState('sale')
   const [propertyType, setPropertyType] = useState('apartment')
   const [legalStatus, setLegalStatus] = useState('acte_livret')
-  const [wilaya, setWilaya] = useState('')
+  const [wilayaCode, setWilayaCode] = useState<number | ''>('')
   const [commune, setCommune] = useState('')
   const [surface, setSurface] = useState('')
   const [rooms, setRooms] = useState('3')
@@ -109,11 +110,18 @@ export function PublishPage() {
     setPreviews((prev) => prev.filter((_, i) => i !== index))
   }
 
+  const communes = getCommunesByWilaya(wilayaCode === '' ? undefined : wilayaCode)
+
+  const handleWilayaChange = (val: number | '') => {
+    setWilayaCode(val)
+    setCommune('') // reset dependent commune when wilaya changes
+  }
+
   const canSubmit =
     title.trim().length >= 3 &&
     description.trim().length >= 10 &&
     Number(price) > 0 &&
-    wilaya.trim().length > 0 &&
+    wilayaCode !== '' &&
     commune.trim().length > 0 &&
     Number(surface) > 0
 
@@ -131,7 +139,10 @@ export function PublishPage() {
         images = await uploadPropertyImages(files, user.id)
       }
 
-      // 2. Insert the listing into public.properties
+      // 2. Insert the listing into public.properties.
+      // Wilaya / commune are stored by their canonical French names so that
+      // listings stay standardized no matter which UI locale was used.
+      const wilayaName = getWilayaByCode(wilayaCode)?.name_fr ?? ''
       const { error } = await supabase.from('properties').insert({
         title: sanitizeText(title),
         description: sanitizeText(description),
@@ -140,7 +151,7 @@ export function PublishPage() {
         operation_type: operation,
         property_type: propertyType,
         legal_status: legalStatus,
-        wilaya: sanitizeText(wilaya),
+        wilaya: wilayaName,
         commune: sanitizeText(commune),
         surface: Number(surface),
         area: Number(surface),
@@ -306,23 +317,44 @@ export function PublishPage() {
             <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
               {locale === 'ar' ? 'الولاية' : 'Wilaya'}
             </label>
-            <Input
-              value={wilaya}
-              onChange={(e) => setWilaya(e.target.value)}
+            <Select
+              value={wilayaCode}
+              onChange={(e) => handleWilayaChange(e.target.value ? Number(e.target.value) : '')}
               required
-              placeholder={locale === 'ar' ? 'مثال: الجزائر' : 'Ex: Alger'}
-            />
+            >
+              <option value="">
+                {locale === 'ar' ? 'اختر الولاية' : 'Sélectionnez la wilaya'}
+              </option>
+              {WILAYAS_58.map((w) => (
+                <option key={w.code} value={w.code}>
+                  {wilayaLabel(w, locale)} ({w.code})
+                </option>
+              ))}
+            </Select>
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
               {locale === 'ar' ? 'البلدية' : 'Commune'}
             </label>
-            <Input
+            <Select
               value={commune}
               onChange={(e) => setCommune(e.target.value)}
               required
-              placeholder={locale === 'ar' ? 'مثال: باب الزوار' : 'Ex: Bab Ezzouar'}
-            />
+              disabled={wilayaCode === ''}
+            >
+              <option value="">
+                {wilayaCode === ''
+                  ? t.filters.selectWilayaFirst
+                  : locale === 'ar'
+                    ? 'اختر البلدية'
+                    : 'Sélectionnez la commune'}
+              </option>
+              {communes.map((c) => (
+                <option key={communeValue(c)} value={communeValue(c)}>
+                  {communeLabel(c, locale)}
+                </option>
+              ))}
+            </Select>
           </div>
         </div>
 

@@ -148,6 +148,7 @@ export interface SearchFilters {
   operationType?: OperationType
   propertyType?: PropertyType
   wilayaId?: number
+  commune?: string
   minPrice?: number
   maxPrice?: number
   minBedrooms?: number

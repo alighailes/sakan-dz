@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Search, MapPin, Home, Building2, Palmtree, Users, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { WILAYAS, OPERATION_TYPES, LEGAL_STATUS } from '@/constants'
+import { WILAYAS_58, getCommunesByWilaya, wilayaLabel, communeLabel, communeValue } from '@/data/algeria-locations'
+import { OPERATION_TYPES, LEGAL_STATUS } from '@/constants'
 import { useLocale } from '@/i18n'
 import { useSearchStore } from '@/stores/searchStore'
 import { cn } from '@/lib/utils'
@@ -33,17 +34,27 @@ export function HeroSearch() {
   const [wilayaId, setWilayaId] = useState<number | ''>(
     searchParams.get('wilaya') ? Number(searchParams.get('wilaya')) : ''
   )
+  const [commune, setCommune] = useState(searchParams.get('commune') || '')
   const [operation, setOperation] = useState<OperationType | ''>(
     (searchParams.get('operation') as OperationType) || ''
   )
 
+  const communes = getCommunesByWilaya(wilayaId === '' ? undefined : wilayaId)
+
+  const handleWilayaChange = (val: number | '') => {
+    setWilayaId(val)
+    setCommune('') // reset dependent commune when wilaya changes
+  }
+
   useEffect(() => {
     const q = searchParams.get('q')
     const wilaya = searchParams.get('wilaya')
+    const communeParam = searchParams.get('commune')
     const op = searchParams.get('operation')
 
     if (q) setQuery(q)
     if (wilaya) setWilayaId(Number(wilaya))
+    setCommune(communeParam || '')
     if (op) {
       setOperation(op as OperationType)
       setActiveOperation(op as OperationType)
@@ -55,6 +66,7 @@ export function HeroSearch() {
     const filters: Record<string, unknown> = {}
     if (query.trim()) filters.query = query.trim()
     if (wilayaId !== '') filters.wilayaId = Number(wilayaId)
+    if (commune) filters.commune = commune
     if (operation) {
       filters.operationType = operation
       setActiveOperation(operation as OperationType)
@@ -64,6 +76,7 @@ export function HeroSearch() {
     const params = new URLSearchParams()
     if (query.trim()) params.set('q', query.trim())
     if (wilayaId !== '') params.set('wilaya', String(wilayaId))
+    if (commune) params.set('commune', commune)
     if (operation) params.set('operation', operation)
     const queryString = params.toString()
     navigate(`/listings${queryString ? `?${queryString}` : ''}`)
@@ -71,9 +84,10 @@ export function HeroSearch() {
 
   const handleQuickFilter = (wilaya: number, op: OperationType) => {
     setWilayaId(wilaya)
+    setCommune('')
     setOperation(op)
     setActiveOperation(op)
-    setFilters({ wilayaId: wilaya, operationType: op })
+    setFilters({ wilayaId: wilaya, commune: undefined, operationType: op })
     navigate(`/listings?wilaya=${wilaya}&operation=${op}`)
   }
 
@@ -139,17 +153,37 @@ export function HeroSearch() {
 
             {/* Search Input Group */}
             <div className="flex flex-col gap-2 sm:flex-row">
-              {/* Wilaya Select */}
-              <div className="relative sm:w-48">
+              {/* Wilaya Select — populated from the Algeria locations dataset */}
+              <div className="relative sm:w-44">
                 <select
                   value={wilayaId}
-                  onChange={(e) => setWilayaId(e.target.value ? Number(e.target.value) : '')}
+                  onChange={(e) => handleWilayaChange(e.target.value ? Number(e.target.value) : '')}
                   className="h-11 w-full appearance-none rounded-xl border border-zinc-200 bg-white pl-3 pr-8 text-sm text-zinc-900 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                 >
                   <option value="">{t.filters.allWilayas}</option>
-                  {WILAYAS.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {locale === 'ar' ? w.nameAr : w.name} ({w.id})
+                  {WILAYAS_58.map((w) => (
+                    <option key={w.code} value={w.code}>
+                      {wilayaLabel(w, locale)} ({w.code})
+                    </option>
+                  ))}
+                </select>
+                <MapPin className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+              </div>
+
+              {/* Commune Select — dependent on the selected wilaya */}
+              <div className="relative sm:w-44">
+                <select
+                  value={commune}
+                  onChange={(e) => setCommune(e.target.value)}
+                  disabled={wilayaId === ''}
+                  className="h-11 w-full appearance-none rounded-xl border border-zinc-200 bg-white pl-3 pr-8 text-sm text-zinc-900 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                >
+                  <option value="">
+                    {wilayaId === '' ? t.filters.selectWilayaFirst : t.filters.allCommunes}
+                  </option>
+                  {communes.map((c) => (
+                    <option key={communeValue(c)} value={communeValue(c)}>
+                      {communeLabel(c, locale)}
                     </option>
                   ))}
                 </select>

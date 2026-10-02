@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { WILAYAS, OPERATION_TYPES, PROPERTY_TYPES, LEGAL_STATUS } from '@/constants'
+import { WILAYAS_58, getCommunesByWilaya, wilayaLabel, communeLabel, communeValue } from '@/data/algeria-locations'
+import { OPERATION_TYPES, PROPERTY_TYPES, LEGAL_STATUS } from '@/constants'
 import { useLocale } from '@/i18n'
 import { useSearchStore } from '@/stores/searchStore'
 import { cn } from '@/lib/utils'
@@ -88,13 +89,38 @@ export function FilterBar() {
                   value={filters.wilayaId ?? ''}
                   onChange={(e) => {
                     const val = e.target.value ? Number(e.target.value) : undefined
-                    setFilters({ wilayaId: val })
+                    // Reset the dependent commune whenever the wilaya changes
+                    setFilters({ wilayaId: val, commune: undefined })
                   }}
                 >
                   <option value="">{t.filters.allWilayas}</option>
-                  {WILAYAS.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {locale === 'ar' ? w.nameAr : w.name}
+                  {WILAYAS_58.map((w) => (
+                    <option key={w.code} value={w.code}>
+                      {wilayaLabel(w, locale)}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              {/* Commune — dependent on the selected wilaya */}
+              <div>
+                <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  {t.filters.commune}
+                </label>
+                <Select
+                  value={filters.commune ?? ''}
+                  disabled={filters.wilayaId === undefined}
+                  onChange={(e) => {
+                    const val = e.target.value || undefined
+                    setFilters({ commune: val })
+                  }}
+                >
+                  <option value="">
+                    {filters.wilayaId === undefined ? t.filters.selectWilayaFirst : t.filters.allCommunes}
+                  </option>
+                  {getCommunesByWilaya(filters.wilayaId).map((c) => (
+                    <option key={communeValue(c)} value={communeValue(c)}>
+                      {communeLabel(c, locale)}
                     </option>
                   ))}
                 </Select>
