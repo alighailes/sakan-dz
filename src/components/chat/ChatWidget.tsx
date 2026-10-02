@@ -38,12 +38,13 @@ export function ChatWidget() {
   }
 
   return (
-    <>
-      {/* Chat Toggle Button */}
+    <div className="fixed bottom-24 right-4 z-40 md:bottom-6 md:right-6">
+      {/* Chat Toggle Button — stays above the mobile bottom nav, below it in z so it never covers "Se connecter" */}
       <button
         onClick={() => setIsOpen(!isOpen)}
+        aria-label={isOpen ? 'Close chat' : 'Open chat'}
         className={cn(
-          'fixed bottom-20 right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-all md:bottom-6 md:right-6',
+          'flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-all',
           isOpen
             ? 'bg-gray-600 text-white'
             : 'bg-primary-600 text-white hover:bg-primary-700'
@@ -52,9 +53,9 @@ export function ChatWidget() {
         {isOpen ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
       </button>
 
-      {/* Chat Panel */}
+      {/* Chat Panel — anchored above the toggle so it never breaks layout */}
       {isOpen && (
-        <div className="fixed bottom-36 right-4 z-50 w-[360px] max-w-[calc(100vw-2rem)] rounded-2xl bg-white shadow-soft-lg dark:bg-gray-900 animate-slide-up md:bottom-24 md:right-6">
+        <div className="absolute bottom-[4.5rem] right-0 w-[360px] max-w-[calc(100vw-2rem)] rounded-2xl bg-white shadow-soft-lg dark:bg-gray-900 animate-slide-up">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700">
             <div className="flex items-center gap-3">
@@ -118,6 +119,6 @@ export function ChatWidget() {
           </div>
         </div>
       )}
-    </>
+    </div>
   )
 }

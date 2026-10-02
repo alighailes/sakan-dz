@@ -15,12 +15,12 @@ const OPERATION_ICONS: Record<string, typeof Home> = {
   colocation: Users,
 }
 
-const QUICK_FILTERS = [
-  { label: 'شقق وهران', wilaya: 31, operation: 'rent' as OperationType },
-  { label: 'استوديو العاصمة', wilaya: 16, operation: 'rent' as OperationType },
-  { label: 'كراء عطل جيجل', wilaya: 18, operation: 'vacation' as OperationType },
-  { label: 'فلل البليدة', wilaya: 9, operation: 'sale' as OperationType },
-  { label: 'شقق قسنطينة', wilaya: 25, operation: 'rent' as OperationType },
+const QUICK_FILTERS: { labelAr: string; labelFr: string; wilaya: number; operation: OperationType }[] = [
+  { labelAr: 'شقق وهران', labelFr: 'Appartements à Oran', wilaya: 31, operation: 'rent' },
+  { labelAr: 'استوديو العاصمة', labelFr: 'Studio à Alger', wilaya: 16, operation: 'rent' },
+  { labelAr: 'كراء عطل جيجل', labelFr: 'Vacances à Jijel', wilaya: 18, operation: 'vacation' },
+  { labelAr: 'فلل البليدة', labelFr: 'Villas à Blida', wilaya: 9, operation: 'sale' },
+  { labelAr: 'شقق قسنطينة', labelFr: 'Appartements à Constantine', wilaya: 25, operation: 'rent' },
 ]
 
 export function HeroSearch() {
@@ -90,7 +90,7 @@ export function HeroSearch() {
       <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-primary-500/20 blur-3xl" />
       <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-accent-500/10 blur-3xl" />
 
-      <div className="relative mx-auto flex w-full max-w-4xl flex-1 flex-col items-center justify-center px-4 py-8 text-center sm:px-6 sm:py-10 lg:px-8 lg:py-12">
+      <div className="relative mx-auto flex w-full max-w-4xl flex-1 flex-col items-center justify-center px-4 pt-8 pb-28 sm:px-6 sm:py-10 lg:px-8 lg:py-12">
         {/* Headline */}
         <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl lg:text-5xl">
           {t.hero.title}
@@ -102,13 +102,13 @@ export function HeroSearch() {
         {/* Floating Glass Search Island */}
         <form onSubmit={handleSearch} className="mx-auto mt-10 max-w-2xl">
           <div className="glass-strong rounded-2xl p-2 shadow-soft-xl">
-            {/* Operation Toggle Pills */}
-            <div className="flex items-center gap-1 overflow-x-auto px-2 pb-2 scrollbar-hide">
+            {/* Operation Toggle Pills — horizontally scrollable on narrow screens */}
+            <div className="flex flex-nowrap items-center gap-1 overflow-x-auto no-scrollbar scrollbar-hide px-2 pb-2">
               <button
                 type="button"
                 onClick={() => setOperation('')}
                 className={cn(
-                  'whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-all duration-200',
+                  'shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-all duration-200',
                   !operation
                     ? 'bg-primary-600 text-white shadow-glow'
                     : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
@@ -124,7 +124,7 @@ export function HeroSearch() {
                     type="button"
                     onClick={() => setOperation(op.value)}
                     className={cn(
-                      'flex items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-all duration-200',
+                      'flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-all duration-200',
                       operation === op.value
                         ? 'bg-primary-600 text-white shadow-glow'
                         : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
@@ -199,15 +199,15 @@ export function HeroSearch() {
           </select>
         </div>
 
-        {/* Quick Filter Chips */}
-        <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+        {/* Quick Filter Chips — localized per current locale */}
+        <div className="mt-4 flex max-w-full flex-nowrap items-center justify-start gap-2 overflow-x-auto no-scrollbar scrollbar-hide sm:justify-center">
           {QUICK_FILTERS.map((chip) => (
             <button
-              key={chip.label}
+              key={`${chip.wilaya}-${chip.operation}`}
               onClick={() => handleQuickFilter(chip.wilaya, chip.operation)}
-              className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-white/90 backdrop-blur-sm transition-all duration-200 hover:border-white/40 hover:bg-white/20 hover:text-white"
+              className="shrink-0 whitespace-nowrap rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-white/90 backdrop-blur-sm transition-all duration-200 hover:border-white/40 hover:bg-white/20 hover:text-white"
             >
-              {chip.label}
+              {locale === 'ar' ? chip.labelAr : chip.labelFr}
             </button>
           ))}
         </div>
