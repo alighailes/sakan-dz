@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-gray-200 dark:border-zinc-800;
+  }
+
+  body {
+    @apply bg-surface-light text-zinc-900 antialiased dark:bg-surface-dark dark:text-zinc-100;
+    font-family: 'Inter', 'Readex Pro', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Arabic font support */
+  [dir='rtl'] body,
+  [lang='ar'] body {
+    font-family: 'Cairo', 'Tajawal', 'Noto Sans Arabic', sans-serif;
+  }
+}
+
+@layer components {
+  /* Glassmorphism surfaces */
+  .glass {
+    @apply bg-white/80 backdrop-blur-md border border-white/20 dark:bg-zinc-900/80 dark:border-zinc-800/60;
+  }
+
+  .glass-strong {
+    @apply bg-white/90 backdrop-blur-lg border border-white/30 dark:bg-zinc-900/90 dark:border-zinc-700/60;
+  }
+
+  /* Shimmer skeleton */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.04) 25%,
+      rgba(0, 0, 0, 0.08) 50%,
+      rgba(0, 0, 0, 0.04) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+
+  .dark .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.04) 25%,
+      rgba(255, 255, 255, 0.08) 50%,
+      rgba(255, 255, 255, 0.04) 75%
+    );
+    background-size: 200% 100%;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Leaflet custom styles */
+.leaflet-container {
+  font-family: inherit;
+  z-index: 1;
+}
+
+.custom-price-marker {
+  background: transparent;
+  border: none;
+}
+
+/* Smooth transitions for theme switch */
+html {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-zinc-300 dark:bg-zinc-600;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-zinc-400 dark:bg-zinc-500;
+}
