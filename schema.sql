@@ -384,3 +384,12 @@ CREATE POLICY "Authenticated users can upload property images"
 CREATE POLICY "Users can delete own property images"
   ON storage.objects FOR DELETE
   USING (bucket_id = 'property-images' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+-- ============================================================
+-- Migration: role-based onboarding (buyer/seller UI mode)
+-- Run once in production. The app also works without this column
+-- by falling back to per-user localStorage persistence.
+-- ============================================================
+
+ALTER TABLE IF EXISTS profiles
+  ADD COLUMN IF NOT EXISTS role TEXT CHECK (role IN ('buyer', 'seller'));

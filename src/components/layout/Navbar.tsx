@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Home, Map, Heart, MessageCircle, Plus, Menu, X, Sun, Moon, Globe, ChevronDown, LogOut, Building2, List, Bookmark, Users } from 'lucide-react'
+import { Home, Map, Heart, MessageCircle, Plus, Menu, X, Sun, Moon, Globe, ChevronDown, LogOut, Building2, List, Bookmark, Users, ArrowLeftRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useThemeStore } from '@/stores/themeStore'
 import { useLocale } from '@/i18n'
@@ -14,9 +14,10 @@ export function Navbar() {
   const userMenuRef = useRef<HTMLDivElement>(null)
   const { theme, toggleTheme } = useThemeStore()
   const { locale, setLocale, t } = useLocale()
-  const { user, profile, signOut } = useAuthStore()
+  const { user, profile, signOut, updateRole } = useAuthStore()
   const location = useLocation()
   const navigate = useNavigate()
+  const isSeller = profile?.role === 'seller'
 
   const navLinks = [
     { to: '/', label: t.nav.home, icon: Home },
@@ -186,6 +187,16 @@ export function Navbar() {
                   {/* Sign Out */}
                   <div className="border-t border-zinc-100 py-1 dark:border-zinc-700">
                     <button
+                      onClick={() => {
+                        setUserMenuOpen(false)
+                        updateRole(isSeller ? 'buyer' : 'seller')
+                      }}
+                      className="flex w-full items-center gap-2 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                    >
+                      <ArrowLeftRight className="h-4 w-4" />
+                      {isSeller ? t.role.switchToBuyer : t.role.switchToSeller}
+                    </button>
+                    <button
                       onClick={handleSignOut}
                       className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
                     >
@@ -301,6 +312,31 @@ export function Navbar() {
                 {t.nav.publish}
               </Button>
             </Link>
+            {/* Role switcher — persists instantly, no re-login needed */}
+            {user && (
+              <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl bg-zinc-50 p-1.5 dark:bg-zinc-800">
+                {(
+                  [
+                    { role: 'buyer' as const, label: t.role.buyerTitle },
+                    { role: 'seller' as const, label: t.role.sellerTitle },
+                  ]
+                ).map(({ role, label }) => (
+                  <button
+                    key={role}
+                    type="button"
+                    onClick={() => updateRole(role)}
+                    className={cn(
+                      'rounded-lg px-3 py-2 text-xs font-bold transition-all',
+                      (profile?.role ?? 'buyer') === role
+                        ? 'bg-primary-600 text-white shadow-sm'
+                        : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
             {/* Currency setting — drawer home on mobile */}
             <div className="mt-2 flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-600 dark:text-zinc-400">
               <span>{locale === 'ar' ? 'العملة' : 'Devise'}</span>

@@ -86,6 +86,8 @@ export interface Property {
 }
 
 // --- User Profile ---
+export type UserRole = 'buyer' | 'seller'
+
 export interface UserProfile {
   id: string
   full_name: string
@@ -93,6 +95,8 @@ export interface UserProfile {
   user_type: UserType
   agency_name?: string
   wilaya_id: number
+  /** UI mode chosen during onboarding (buyer/seller). Distinct from user_type. */
+  role?: UserRole
   avatar_url?: string
   created_at: string
   updated_at: string

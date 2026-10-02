@@ -380,6 +380,18 @@ const fr = {
     location: 'Alger, Algérie',
     socialTitle: 'Suivez-nous',
   },
+  role: {
+    onboardingTitle: 'Bienvenue sur Sakan DZ',
+    onboardingSubtitle: 'Choisissez votre expérience : explorer les biens ou publier vos annonces.',
+    buyerTitle: 'Acheteur / Locataire',
+    buyerDesc: 'Parcourir les biens, sauvegarder vos favoris et contacter les annonceurs.',
+    sellerTitle: 'Propriétaire / Agent',
+    sellerDesc: 'Publier des annonces, gérer vos biens et recevoir les demandes.',
+    switchToSeller: 'Passer en mode vendeur',
+    switchToBuyer: 'Passer en mode acheteur',
+    later: 'Plus tard',
+    dashboard: 'Tableau de bord',
+  },
   agents: {
     title: 'Annuaire des agents et courtiers immobiliers certifiés en Algérie',
     subtitle: 'Trouvez votre agent immobilier de confiance pour finaliser vos transactions de vente et de location en toute sécurité juridique.',

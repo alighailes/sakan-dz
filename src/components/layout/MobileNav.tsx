@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Home, Map, Heart, MessageCircle, Plus, User, Users } from 'lucide-react'
+import { Home, Map, Heart, MessageCircle, Plus, User, LayoutDashboard, Bookmark } from 'lucide-react'
 import { useLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/authStore'
 import { cn } from '@/lib/utils'
@@ -7,16 +7,24 @@ import { cn } from '@/lib/utils'
 export function MobileNav() {
   const location = useLocation()
   const { t } = useLocale()
-  const { user } = useAuthStore()
+  const { user, profile } = useAuthStore()
 
-  const navItems = [
-    { to: '/', icon: Home, label: t.nav.home },
-    { to: '/listings', icon: Home, label: t.nav.listings },
-    { to: '/agents', icon: Users, label: t.nav.agents || 'الوكلاء' },
-    { to: '/map', icon: Map, label: t.nav.map },
-    { to: '/favorites', icon: Heart, label: t.nav.favorites },
-    { to: '/messages', icon: MessageCircle, label: t.nav.messages },
-  ]
+  // Seller mode surfaces management shortcuts; buyer mode focuses discovery.
+  // Unknown/unset role falls back to buyer. All targets are real routes.
+  const navItems =
+    profile?.role === 'seller'
+      ? [
+          { to: '/my-listings', icon: LayoutDashboard, label: t.role.dashboard },
+          { to: '/messages', icon: MessageCircle, label: t.nav.messages },
+          { to: '/map', icon: Map, label: t.nav.map },
+          { to: '/saved-searches', icon: Bookmark, label: t.nav.savedSearches },
+        ]
+      : [
+          { to: '/', icon: Home, label: t.nav.home },
+          { to: '/listings', icon: Home, label: t.nav.listings },
+          { to: '/map', icon: Map, label: t.nav.map },
+          { to: '/favorites', icon: Heart, label: t.nav.favorites },
+        ]
 
   const isActive = (path: string) => location.pathname === path
 

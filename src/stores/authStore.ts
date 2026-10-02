@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import type { User, Session } from '@supabase/supabase-js'
-import type { UserProfile, UserType } from '@/types'
+import type { UserProfile, UserType, UserRole } from '@/types'
 
 // ============================================================
 // Mock Mode Password Hashing
@@ -46,6 +46,7 @@ interface AuthState {
   signInWithPassword: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>
+  updateRole: (role: UserRole) => Promise<void>
   resetPassword: (email: string) => Promise<void>
   clearError: () => void
 }
@@ -103,6 +104,33 @@ function saveMockSession(session: MockSession) {
 
 function clearMockSession() {
   localStorage.removeItem(MOCK_SESSION_KEY)
+}
+
+// Role fallback persisted per user (used when profiles.role column is absent)
+const ROLE_STORAGE_PREFIX = 'sakan-user-role'
+
+function getStoredRole(userId: string): UserRole | undefined {
+  try {
+    const raw = localStorage.getItem(`${ROLE_STORAGE_PREFIX}:${userId}`)
+    return raw === 'buyer' || raw === 'seller' ? raw : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function setStoredRole(userId: string, role: UserRole) {
+  try {
+    localStorage.setItem(`${ROLE_STORAGE_PREFIX}:${userId}`, role)
+  } catch {
+    // Storage unavailable — in-memory profile value still applies
+  }
+}
+
+/** Merge a locally stored role into a profile that has none yet. */
+function withRole(profile: UserProfile | null, userId: string | undefined): UserProfile | null {
+  if (!profile || profile.role || !userId) return profile
+  const stored = getStoredRole(userId)
+  return stored ? { ...profile, role: stored } : profile
 }
 
 function createMockUser(mockUser: MockUser): User {
@@ -171,7 +199,7 @@ export const useAuthStore = create<AuthState>()(
 
               set({
                 user: session.user,
-                profile: profile || null,
+                profile: withRole(profile || null, session.user.id),
                 session,
                 loading: false,
                 isMockMode: false,
@@ -191,7 +219,7 @@ export const useAuthStore = create<AuthState>()(
 
                 set({
                   user: newSession.user,
-                  profile: profile || null,
+                  profile: withRole(profile || null, newSession.user.id),
                   session: newSession,
                   isMockMode: false,
                 })
@@ -210,7 +238,7 @@ export const useAuthStore = create<AuthState>()(
           if (mockSession) {
             set({
               user: createMockUser(mockSession.user),
-              profile: mockSession.user.profile,
+              profile: withRole(mockSession.user.profile, mockSession.user.id),
               session: createMockSession(mockSession.user),
               loading: false,
               isMockMode: true,
@@ -260,7 +288,7 @@ export const useAuthStore = create<AuthState>()(
 
             set({
               user: data.user,
-              profile: { ...profile, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+              profile: withRole({ ...profile, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }, data.user.id),
               session: data.session,
               loading: false,
               isMockMode: false,
@@ -301,7 +329,7 @@ export const useAuthStore = create<AuthState>()(
 
           set({
             user: createMockUser(newUser),
-            profile: newUser.profile,
+            profile: withRole(newUser.profile, newUser.id),
             session: createMockSession(newUser),
             loading: false,
             isMockMode: true,
@@ -333,7 +361,7 @@ export const useAuthStore = create<AuthState>()(
 
             set({
               user: data.user,
-              profile: profile || null,
+              profile: withRole(profile || null, data.user.id),
               session: data.session,
               loading: false,
               isMockMode: false,
@@ -358,7 +386,7 @@ export const useAuthStore = create<AuthState>()(
 
           set({
             user: createMockUser(found),
-            profile: found.profile,
+            profile: withRole(found.profile, found.id),
             session: createMockSession(found),
             loading: false,
             isMockMode: true,
@@ -414,6 +442,38 @@ export const useAuthStore = create<AuthState>()(
           }
 
           set({ profile: { ...profile, ...updates }, loading: false })
+        }
+      },
+
+      // Update buyer/seller UI role (instant local update + Supabase persist)
+      updateRole: async (role) => {
+        const { user, profile, isMockMode } = get()
+        if (!user) return
+
+        set({ profile: profile ? { ...profile, role } : profile })
+        setStoredRole(user.id, role)
+
+        if (isMockMode) {
+          const users = getMockUsers()
+          const idx = users.findIndex((u) => u.id === user.id)
+          if (idx >= 0) {
+            users[idx].profile = { ...users[idx].profile, role }
+            saveMockUsers(users)
+            const mockSession = getMockSession()
+            if (mockSession) {
+              mockSession.user.profile = users[idx].profile
+              saveMockSession(mockSession)
+            }
+          }
+          return
+        }
+
+        if (isSupabaseConfigured()) {
+          const { error } = await supabase.from('profiles').update({ role }).eq('id', user.id)
+          if (error) {
+            // Column may not exist yet in production — local + stored value stands.
+            console.warn('Could not persist role to profiles table:', error.message)
+          }
         }
       },
 

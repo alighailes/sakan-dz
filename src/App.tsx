@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Layout } from '@/components/layout/Layout'
 import { ChatWidget } from '@/components/chat/ChatWidget'
+import { RoleOnboardingModal } from '@/components/onboarding/RoleOnboardingModal'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { InstallBanner } from '@/components/InstallBanner'
 import { HomePage } from '@/pages/HomePage'
@@ -81,6 +82,7 @@ export default function App() {
         </Route>
       </Routes>
       <ChatWidget />
+      <RoleOnboardingModal />
       <InstallBanner />
     </BrowserRouter>
   )
