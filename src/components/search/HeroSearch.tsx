@@ -113,11 +113,11 @@ export function HeroSearch() {
           {t.hero.subtitle}
         </p>
 
-        {/* Floating Glass Search Island */}
-        <form onSubmit={handleSearch} className="mx-auto mt-10 max-w-2xl">
-          <div className="glass-strong rounded-2xl p-2 shadow-soft-xl">
+        {/* Floating Glass Search Island — bounded centered card */}
+        <form onSubmit={handleSearch} className="mx-auto mt-10 w-full min-w-0 max-w-xl sm:px-0">
+          <div className="glass-strong box-border w-full min-w-0 overflow-hidden rounded-2xl p-2 shadow-soft-xl">
             {/* Operation Toggle Pills — horizontally scrollable on narrow screens */}
-            <div className="flex flex-nowrap items-center gap-1 overflow-x-auto no-scrollbar scrollbar-hide px-2 pb-2">
+            <div className="flex w-full min-w-0 items-center gap-2 overflow-x-auto no-scrollbar scrollbar-hide px-2 pb-2">
               <button
                 type="button"
                 onClick={() => setOperation('')}
@@ -151,10 +151,10 @@ export function HeroSearch() {
               })}
             </div>
 
-            {/* Search Input Group */}
-            <div className="flex flex-col gap-2 sm:flex-row">
+            {/* Search Input Group — stacks until lg so sm screens never crowd */}
+            <div className="flex w-full min-w-0 flex-col gap-2 lg:flex-row">
               {/* Wilaya Select — populated from the Algeria locations dataset */}
-              <div className="relative sm:w-44">
+              <div className="relative lg:w-44">
                 <select
                   value={wilayaId}
                   onChange={(e) => handleWilayaChange(e.target.value ? Number(e.target.value) : '')}
@@ -171,7 +171,7 @@ export function HeroSearch() {
               </div>
 
               {/* Commune Select — dependent on the selected wilaya */}
-              <div className="relative sm:w-44">
+              <div className="relative lg:w-44">
                 <select
                   value={commune}
                   onChange={(e) => setCommune(e.target.value)}
@@ -191,7 +191,7 @@ export function HeroSearch() {
               </div>
 
               {/* Search Input */}
-              <div className="relative flex-1">
+              <div className="relative min-w-0 flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
                 <input
                   type="text"
@@ -203,7 +203,7 @@ export function HeroSearch() {
               </div>
 
               {/* Search Button */}
-              <Button type="submit" size="lg" className="h-11 w-full sm:w-auto">
+              <Button type="submit" size="lg" className="h-11 w-full lg:w-auto">
                 <Search className="h-4 w-4" />
                 {t.hero.search}
               </Button>
@@ -234,7 +234,7 @@ export function HeroSearch() {
         </div>
 
         {/* Quick Filter Chips — localized per current locale */}
-        <div className="mt-4 flex max-w-full flex-nowrap items-center justify-start gap-2 overflow-x-auto no-scrollbar scrollbar-hide sm:justify-center">
+        <div className="mt-4 flex w-full min-w-0 flex-nowrap items-center justify-start gap-2 overflow-x-auto no-scrollbar scrollbar-hide sm:justify-center">
           {QUICK_FILTERS.map((chip) => (
             <button
               key={`${chip.wilaya}-${chip.operation}`}
