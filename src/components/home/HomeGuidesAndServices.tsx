@@ -1,9 +1,13 @@
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Building2, Calculator, Globe } from 'lucide-react'
+import { ArrowLeft, Building2, Calculator, Globe, Heart, List } from 'lucide-react'
 import { useLocale } from '@/i18n'
+import { useAuthStore } from '@/stores/authStore'
 
 export function HomeGuidesAndServices() {
-  const { t } = useLocale()
+  const { locale, t } = useLocale()
+  // Reactive auth subscription: banner swaps automatically on login/logout
+  const { user, profile } = useAuthStore()
+  const isAuthenticated = !!user
 
   const authTitle = t?.home?.guides?.authTitle ?? 'حافظ على تنظيمك. سجّل الدخول أو أنشئ حساباً'
   const authSubtitle = t?.home?.guides?.authSubtitle ?? 'احفظ العقارات المفضلة، أنشئ تنبيهات مخصصة للأسعار، وتابع استفساراتك مع المعلنين.'
@@ -35,19 +39,52 @@ export function HomeGuidesAndServices() {
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-      {/* Tier 1: Auth Prompt Card */}
-      <div className="flex flex-col items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 md:flex-row">
-        <div>
-          <h3 className="text-lg font-bold text-zinc-900 dark:text-white">{authTitle}</h3>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{authSubtitle}</p>
+      {/* Tier 1: Auth Prompt Card — hidden for logged-in users, replaced by a welcome banner */}
+      {!isAuthenticated ? (
+        <div className="flex flex-col items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-white p-6 shadow-soft dark:border-zinc-800 dark:bg-zinc-900 md:flex-row">
+          <div>
+            <h3 className="text-lg font-bold text-zinc-900 dark:text-white">{authTitle}</h3>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{authSubtitle}</p>
+          </div>
+          <Link
+            to="/auth"
+            className="shrink-0 rounded-xl border-2 border-primary-600 px-6 py-3 text-sm font-bold text-primary-600 transition-all hover:bg-primary-600 hover:text-white dark:border-primary-400 dark:text-primary-400 dark:hover:bg-primary-400 dark:hover:text-zinc-950"
+          >
+            {authCta}
+          </Link>
         </div>
-        <Link
-          to="/auth"
-          className="shrink-0 rounded-xl border-2 border-primary-600 px-6 py-3 text-sm font-bold text-primary-600 transition-all hover:bg-primary-600 hover:text-white dark:border-primary-400 dark:text-primary-400 dark:hover:bg-primary-400 dark:hover:text-zinc-950"
-        >
-          {authCta}
-        </Link>
-      </div>
+      ) : (
+        <div className="flex flex-col items-center justify-between gap-4 rounded-2xl border border-primary-200 bg-primary-50 p-6 shadow-soft dark:border-primary-900/40 dark:bg-primary-950/40 md:flex-row">
+          <div>
+            <h3 className="text-lg font-bold text-zinc-900 dark:text-white">
+              {locale === 'ar'
+                ? `مرحباً بعودتك${profile?.full_name ? `، ${profile.full_name}` : ''}`
+                : `Bon retour${profile?.full_name ? `, ${profile.full_name}` : ''}`}
+            </h3>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              {locale === 'ar'
+                ? 'تابع إعلاناتك وعقاراتك المفضلة من مكان واحد.'
+                : 'Retrouvez vos annonces et vos favoris au même endroit.'}
+            </p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Link
+              to="/my-listings"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-primary-600 px-5 py-3 text-sm font-bold text-white transition-all hover:bg-primary-700"
+            >
+              <List className="h-4 w-4" />
+              {t.nav.myListings}
+            </Link>
+            <Link
+              to="/favorites"
+              className="inline-flex items-center gap-1.5 rounded-xl border-2 border-primary-600 px-5 py-3 text-sm font-bold text-primary-600 transition-all hover:bg-primary-600 hover:text-white dark:border-primary-400 dark:text-primary-400 dark:hover:bg-primary-400 dark:hover:text-zinc-950"
+            >
+              <Heart className="h-4 w-4" />
+              {t.nav.favorites}
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Tier 2: Advice & Guides Grid */}
       <div className="my-8 grid grid-cols-1 gap-6 md:grid-cols-3">
