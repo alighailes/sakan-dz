@@ -390,7 +390,7 @@ const fr = {
     switchToSeller: 'Passer en mode vendeur',
     switchToBuyer: 'Passer en mode acheteur',
     buyerBadge: 'Acheteur',
-    sellerBadge: 'Vendeur',
+    sellerBadge: 'Propriétaire / Agent',
     browsingAs: 'Vous naviguez en tant que',
     later: 'Plus tard',
     dashboard: 'Tableau de bord',

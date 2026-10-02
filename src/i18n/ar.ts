@@ -384,7 +384,7 @@ const ar: TranslationKeys = {
     switchToSeller: 'التبديل إلى حساب بائع',
     switchToBuyer: 'التبديل إلى وضع التصفح والمشتري',
     buyerBadge: 'مشتري',
-    sellerBadge: 'بائع',
+    sellerBadge: 'بائع / وكيل',
     browsingAs: 'أنت تتصفح كـ',
     later: 'لاحقاً',
     dashboard: 'لوحة التحكم',

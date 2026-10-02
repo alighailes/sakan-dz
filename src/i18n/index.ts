@@ -28,6 +28,13 @@ export const useLocaleStore = create<LocaleState>()(
     }),
     {
       name: 'sakan-locale',
+      // Never trust a persisted `t` snapshot: rebuild it from `locale` so
+      // newly added translation keys can't crash on stale localStorage.
+      merge: (persisted, current) => {
+        const stored = (persisted ?? {}) as Partial<LocaleState>
+        const locale = stored.locale === 'ar' || stored.locale === 'fr' ? stored.locale : current.locale
+        return { ...current, locale, t: translations[locale] }
+      },
       onRehydrateStorage: () => (state) => {
         if (state) {
           const dir = state.locale === 'ar' ? 'rtl' : 'ltr'

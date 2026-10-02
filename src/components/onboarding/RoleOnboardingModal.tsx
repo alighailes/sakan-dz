@@ -31,18 +31,18 @@ export function RoleOnboardingModal() {
   }
 
   const options: { role: UserRole; icon: typeof Home; title: string; desc: string }[] = [
-    { role: 'buyer', icon: Home, title: t.role.buyerTitle, desc: t.role.buyerDesc },
-    { role: 'seller', icon: Building2, title: t.role.sellerTitle, desc: t.role.sellerDesc },
+    { role: 'buyer', icon: Home, title: t.role?.buyerTitle ?? 'Acheteur', desc: t.role?.buyerDesc ?? '' },
+    { role: 'seller', icon: Building2, title: t.role?.sellerTitle ?? 'Vendeur', desc: t.role?.sellerDesc ?? '' },
   ]
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm animate-fade-in">
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-soft-xl dark:bg-zinc-900 sm:p-8 animate-scale-in">
         <h2 className="text-center text-xl font-bold text-zinc-900 dark:text-white">
-          {t.role.onboardingTitle}
+          {t.role?.onboardingTitle ?? 'Bienvenue'}
         </h2>
         <p className="mt-2 text-center text-sm text-zinc-500 dark:text-zinc-400">
-          {t.role.onboardingSubtitle}
+          {t.role?.onboardingSubtitle ?? ''}
         </p>
 
         <div className="mt-6 space-y-3">
@@ -78,7 +78,7 @@ export function RoleOnboardingModal() {
           onClick={() => setDismissed(true)}
           className="mt-4 w-full text-center text-sm text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
         >
-          {t.role.later}
+          {t.role?.later ?? 'Plus tard'}
         </button>
       </div>
     </div>

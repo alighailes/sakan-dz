@@ -32,7 +32,7 @@ export function MobileNav() {
   // Seller: management layout. /dashboard has no route — /my-listings serves
   // as both dashboard and listings manager, hence the shared target.
   const sellerLeft: TabDef[] = [
-    { to: '/my-listings', icon: LayoutDashboard, label: t.role.dashboard },
+    { to: '/my-listings', icon: LayoutDashboard, label: t.role?.dashboard ?? 'Tableau de bord' },
     { to: '/messages', icon: MessageCircle, label: t.nav.messages },
   ]
   const sellerRight: TabDef[] = [

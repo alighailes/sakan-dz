@@ -64,7 +64,7 @@ export function Navbar() {
   const roleBadge = (
     <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary-100 px-2 py-0.5 text-[11px] font-bold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
       {isSeller ? <Building2 className="h-3 w-3" /> : <Home className="h-3 w-3" />}
-      {isSeller ? t.role.sellerBadge : t.role.buyerBadge}
+      {isSeller ? (t.role?.sellerBadge ?? 'Vendeur') : (t.role?.buyerBadge ?? 'Acheteur')}
     </span>
   )
 
@@ -202,7 +202,9 @@ export function Navbar() {
                       className="flex w-full items-center gap-2 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-700"
                     >
                       <ArrowLeftRight className="h-4 w-4" />
-                      {isSeller ? t.role.switchToBuyer : t.role.switchToSeller}
+                      {isSeller
+                        ? (t.role?.switchToBuyer ?? 'Passer en mode acheteur')
+                        : (t.role?.switchToSeller ?? 'Passer en mode vendeur')}
                     </button>
                     <button
                       onClick={handleSignOut}
@@ -325,7 +327,7 @@ export function Navbar() {
             {user && (
               <div className="mt-2 rounded-xl bg-zinc-50 p-2.5 dark:bg-zinc-800">
                 <p className="flex items-center gap-1.5 px-1 pb-2 text-xs text-zinc-500 dark:text-zinc-400">
-                  {t.role.browsingAs} {roleBadge}
+                  {t.role?.browsingAs ?? 'أنت تتصفح كـ'} {roleBadge}
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   {(
