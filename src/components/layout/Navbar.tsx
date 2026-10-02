@@ -94,16 +94,17 @@ export function Navbar() {
           ))}
         </nav>
 
-        {/* Actions */}
+        {/* Actions — mobile keeps only: Theme, Language, Hamburger */}
         <div className="flex items-center gap-2">
-          {/* Language Toggle */}
+          {/* Language Switcher — visible on mobile and desktop */}
           <Button
             variant="ghost"
-            size="icon"
             onClick={() => setLocale(locale === 'fr' ? 'ar' : 'fr')}
-            className="hidden sm:flex"
+            className="flex items-center gap-1 px-2"
+            aria-label="Switch language"
           >
             <Globe className="h-5 w-5" />
+            <span className="text-xs font-bold uppercase">{locale}</span>
           </Button>
 
           {/* Theme Toggle */}
@@ -111,10 +112,13 @@ export function Navbar() {
             {theme === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
           </Button>
 
-          {/* Currency Toggle */}
-          <CurrencyToggle />
+          {/* Currency Toggle — desktop only, lives in the mobile drawer */}
+          <div className="hidden md:flex">
+            <CurrencyToggle />
+          </div>
 
-          {/* Auth Section */}
+          {/* Auth Section — desktop only, account lives in the mobile drawer */}
+          <div className="hidden md:block">
           {user ? (
             <div className="relative" ref={userMenuRef}>
               <button
@@ -199,6 +203,7 @@ export function Navbar() {
               </Button>
             </Link>
           )}
+          </div>
 
           {/* Publish CTA */}
           <Link to="/publish" className="hidden sm:block">
@@ -224,6 +229,20 @@ export function Navbar() {
       {mobileOpen && (
         <div className="border-t border-zinc-200 bg-white px-4 py-3 md:hidden dark:border-zinc-800 dark:bg-zinc-900 animate-fade-in">
           <nav className="flex flex-col gap-1">
+            {/* Account header — exclusive mobile home of the profile/avatar */}
+            {user && (
+              <div className="mb-2 flex items-center gap-3 rounded-lg bg-zinc-50 px-3 py-2.5 dark:bg-zinc-800">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
+                  {getInitials()}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-zinc-900 dark:text-white">
+                    {profile?.full_name || user.email}
+                  </p>
+                  <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{user.email}</p>
+                </div>
+              </div>
+            )}
             {navLinks.map(({ to, label, icon: Icon }) => (
               <Link
                 key={to}
@@ -282,6 +301,11 @@ export function Navbar() {
                 {t.nav.publish}
               </Button>
             </Link>
+            {/* Currency setting — drawer home on mobile */}
+            <div className="mt-2 flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-600 dark:text-zinc-400">
+              <span>{locale === 'ar' ? 'العملة' : 'Devise'}</span>
+              <CurrencyToggle />
+            </div>
           </nav>
         </div>
       )}
