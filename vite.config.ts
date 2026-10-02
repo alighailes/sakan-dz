@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
-  base: '/sakan-dz/',
+  base: '/',
   plugins: [
     react(),
     VitePWA({
@@ -18,11 +18,11 @@ export default defineConfig({
         display: 'standalone',
         dir: 'ltr',
         lang: 'fr',
-        start_url: '/sakan-dz/',
-        scope: '/sakan-dz/',
+        start_url: '/',
+        scope: '/',
         icons: [
           {
-            src: '/sakan-dz/favicon.svg',
+            src: '/favicon.svg',
             sizes: 'any',
             type: 'image/svg+xml',
           },
