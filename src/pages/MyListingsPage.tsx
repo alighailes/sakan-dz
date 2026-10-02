@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { useLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/authStore'
 import { useProperties } from '@/hooks/useProperties'
+import { deleteProperty } from '@/services/api'
 import { WILAYAS } from '@/constants'
 import { formatPrice, getOperationLabelFr, getPropertyTypeLabelFr } from '@/lib/utils'
 import { VipBadge } from '@/components/VipBadge'
@@ -15,13 +16,44 @@ import { VipUpgradeModal } from '@/components/VipUpgradeModal'
 export function MyListingsPage() {
   const { user } = useAuthStore()
   const { locale, t } = useLocale()
-  const { properties, loading } = useProperties()
+  const { properties, loading, refetch } = useProperties()
   const [vipModalOpen, setVipModalOpen] = useState(false)
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null)
+  const [deletedIds, setDeletedIds] = useState<string[]>([])
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const myProperties = user
-    ? properties.filter((p) => p.ownerId === user.id)
+    ? properties.filter((p) => p.ownerId === user.id && !deletedIds.includes(p.id))
     : []
+
+  const handleDelete = async (propertyId: string) => {
+    const confirmed = window.confirm(
+      locale === 'ar' ? 'هل أنت متأكد من حذف هذا الإعلان؟' : 'Supprimer cette annonce ?'
+    )
+    if (!confirmed || deletingId) return
+
+    setDeletingId(propertyId)
+    try {
+      const result = await deleteProperty(propertyId)
+      if (!result.success) {
+        window.alert(result.errorMessage ?? t.common.error)
+        return
+      }
+      if (result.count === 0) {
+        window.alert(
+          locale === 'ar'
+            ? 'تعذّر الحذف: غير مصرّح لك بحذف هذا الإعلان.'
+            : 'Suppression impossible : autorisation refusée pour cette annonce.'
+        )
+        return
+      }
+      // Instant UI update + re-fetch to stay in sync with the server
+      setDeletedIds((prev) => [...prev, propertyId])
+      refetch()
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   const handleVipUpgrade = () => {
     // In mock mode, just mark as featured
@@ -147,7 +179,14 @@ export function MyListingsPage() {
                         {t.property.viewDetails}
                       </Button>
                     </Link>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-red-500 hover:text-red-600 disabled:opacity-50"
+                      disabled={deletingId === property.id}
+                      onClick={() => handleDelete(property.id)}
+                      aria-label={t.common.delete}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>

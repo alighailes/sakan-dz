@@ -341,3 +341,72 @@ export async function fetchFavoriteProperties(userId: string): Promise<Property[
   if (!data || data.length === 0) return []
   return (data as Record<string, unknown>[]).map(mapRowToProperty)
 }
+
+/* ------------------------------------------------------------------ */
+/* Delete / Update — owner operations on properties                     */
+/* NOTE: properties.id is UUID (string) — pass the id through as-is.    */
+/* ------------------------------------------------------------------ */
+
+export interface DeletePropertyResult {
+  success: boolean
+  count: number
+  errorMessage: string | null
+}
+
+/** Delete a single property by exact id match. */
+export async function deleteProperty(propertyId: string): Promise<DeletePropertyResult> {
+  const { error, count } = await supabase
+    .from('properties')
+    .delete({ count: 'exact' })
+    .eq('id', propertyId)
+
+  if (error) {
+    console.error('Error deleting property:', error.message)
+    return { success: false, count: 0, errorMessage: error.message }
+  }
+
+  const affected = count ?? 0
+  if (affected === 0) {
+    console.warn(
+      'Delete affected 0 rows — RLS likely prevented the deletion ' +
+        '(auth.uid() vs owner_id mismatch) for id:',
+      propertyId
+    )
+  }
+
+  return { success: true, count: affected, errorMessage: null }
+}
+
+/** Read-only / system-managed fields that must never be sent in an update. */
+const UPDATE_STRIPPED_FIELDS = new Set([
+  'id',
+  'created_at',
+  'createdAt',
+  'views_count',
+  'viewsCount',
+  'owner_id',
+  'ownerId',
+])
+
+/** Update a single property by exact id match, stripping read-only fields. */
+export async function updateProperty(
+  propertyId: string,
+  updates: Record<string, unknown>
+): Promise<{ success: boolean; errorMessage: string | null }> {
+  const payload: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(updates)) {
+    if (!UPDATE_STRIPPED_FIELDS.has(key) && value !== undefined) {
+      payload[key] = value
+    }
+  }
+  payload.updated_at = new Date().toISOString()
+
+  const { error } = await supabase.from('properties').update(payload).eq('id', propertyId)
+
+  if (error) {
+    console.error('Error updating property:', error.message)
+    return { success: false, errorMessage: error.message }
+  }
+
+  return { success: true, errorMessage: null }
+}
