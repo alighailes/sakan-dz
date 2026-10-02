@@ -61,6 +61,13 @@ export function Navbar() {
     return 'U'
   }
 
+  const roleBadge = (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary-100 px-2 py-0.5 text-[11px] font-bold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
+      {isSeller ? <Building2 className="h-3 w-3" /> : <Home className="h-3 w-3" />}
+      {isSeller ? t.role.sellerBadge : t.role.buyerBadge}
+    </span>
+  )
+
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/80 backdrop-blur-lg dark:border-zinc-800 dark:bg-zinc-900/80">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -136,8 +143,9 @@ export function Navbar() {
                 <div className="glass-strong absolute end-0 top-full mt-2 w-56 rounded-xl py-1 shadow-soft-xl animate-fade-in">
                   {/* User Info */}
                   <div className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-700">
-                    <p className="text-sm font-medium text-zinc-900 dark:text-white">
-                      {profile?.full_name || user.email}
+                    <p className="flex items-center gap-2 text-sm font-medium text-zinc-900 dark:text-white">
+                      <span className="min-w-0 truncate">{profile?.full_name || user.email}</span>
+                      {roleBadge}
                     </p>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400">{user.email}</p>
                     {profile?.user_type === 'agency' && (
@@ -247,8 +255,9 @@ export function Navbar() {
                   {getInitials()}
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-zinc-900 dark:text-white">
-                    {profile?.full_name || user.email}
+                  <p className="flex items-center gap-2 text-sm font-medium text-zinc-900 dark:text-white">
+                    <span className="min-w-0 truncate">{profile?.full_name || user.email}</span>
+                    {roleBadge}
                   </p>
                   <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{user.email}</p>
                 </div>
@@ -314,27 +323,32 @@ export function Navbar() {
             </Link>
             {/* Role switcher — persists instantly, no re-login needed */}
             {user && (
-              <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl bg-zinc-50 p-1.5 dark:bg-zinc-800">
-                {(
-                  [
-                    { role: 'buyer' as const, label: t.role.buyerTitle },
-                    { role: 'seller' as const, label: t.role.sellerTitle },
-                  ]
-                ).map(({ role, label }) => (
-                  <button
-                    key={role}
-                    type="button"
-                    onClick={() => updateRole(role)}
-                    className={cn(
-                      'rounded-lg px-3 py-2 text-xs font-bold transition-all',
-                      (profile?.role ?? 'buyer') === role
-                        ? 'bg-primary-600 text-white shadow-sm'
-                        : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
+              <div className="mt-2 rounded-xl bg-zinc-50 p-2.5 dark:bg-zinc-800">
+                <p className="flex items-center gap-1.5 px-1 pb-2 text-xs text-zinc-500 dark:text-zinc-400">
+                  {t.role.browsingAs} {roleBadge}
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(
+                    [
+                      { role: 'buyer' as const, label: t.role.buyerTitle },
+                      { role: 'seller' as const, label: t.role.sellerTitle },
+                    ]
+                  ).map(({ role, label }) => (
+                    <button
+                      key={role}
+                      type="button"
+                      onClick={() => updateRole(role)}
+                      className={cn(
+                        'rounded-lg px-3 py-2 text-xs font-bold transition-all',
+                        (profile?.role ?? 'buyer') === role
+                          ? 'bg-primary-600 text-white shadow-sm'
+                          : 'bg-white text-zinc-500 hover:text-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200'
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {/* Currency setting — drawer home on mobile */}

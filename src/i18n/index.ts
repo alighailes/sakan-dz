@@ -18,7 +18,12 @@ export const useLocaleStore = create<LocaleState>()(
   persist(
     (set) => ({
       locale: 'fr',
-      setLocale: (locale) => set({ locale, t: translations[locale] }),
+      setLocale: (locale) => {
+        set({ locale, t: translations[locale] })
+        // Keep text direction in sync so flex layouts mirror automatically in Arabic
+        document.documentElement.dir = locale === 'ar' ? 'rtl' : 'ltr'
+        document.documentElement.lang = locale
+      },
       t: translations.fr,
     }),
     {
