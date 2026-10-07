@@ -1,0 +1,292 @@
+import { useState, useEffect, useMemo } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Search, Home, Building2, Palmtree, Users, TrendingUp } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { SearchableSelect } from '@/components/ui/searchable-select'
+import { WILAYAS_58, getCommunesByWilaya, wilayaLabel, communeLabel, communeValue } from '@/data/algeria-locations'
+import { OPERATION_TYPES, LEGAL_STATUS } from '@/constants'
+import { useLocale } from '@/i18n'
+import { useSearchStore } from '@/stores/searchStore'
+import { cn } from '@/lib/utils'
+import type { OperationType, LegalStatus } from '@/types'
+
+const OPERATION_ICONS: Record<string, typeof Home> = {
+  rent: Building2,
+  sale: Home,
+  vacation: Palmtree,
+  colocation: Users,
+}
+
+const QUICK_FILTERS: { labelAr: string; labelFr: string; wilaya: number; operation: OperationType }[] = [
+  { labelAr: 'شقق وهران', labelFr: 'Appartements à Oran', wilaya: 31, operation: 'rent' },
+  { labelAr: 'استوديو العاصمة', labelFr: 'Studio à Alger', wilaya: 16, operation: 'rent' },
+  { labelAr: 'كراء عطل جيجل', labelFr: 'Vacances à Jijel', wilaya: 18, operation: 'vacation' },
+  { labelAr: 'فلل البليدة', labelFr: 'Villas à Blida', wilaya: 9, operation: 'sale' },
+  { labelAr: 'شقق قسنطينة', labelFr: 'Appartements à Constantine', wilaya: 25, operation: 'rent' },
+]
+
+export function HeroSearch() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const { locale, t } = useLocale()
+  const { filters, setFilters, setActiveOperation } = useSearchStore()
+
+  const [query, setQuery] = useState(searchParams.get('q') || '')
+  const [wilayaId, setWilayaId] = useState<number | ''>(
+    searchParams.get('wilaya') ? Number(searchParams.get('wilaya')) : ''
+  )
+  const [commune, setCommune] = useState(searchParams.get('commune') || '')
+  const [operation, setOperation] = useState<OperationType | ''>(
+    (searchParams.get('operation') as OperationType) || ''
+  )
+
+  const communes = getCommunesByWilaya(wilayaId === '' ? undefined : wilayaId)
+
+  const wilayaOptions = useMemo(
+    () =>
+      WILAYAS_58.map((w) => ({
+        value: String(w.code),
+        label: `${wilayaLabel(w, locale)} (${w.code})`,
+      })),
+    [locale]
+  )
+  const communeOptions = useMemo(
+    () =>
+      communes.map((c) => ({
+        value: communeValue(c),
+        label: communeLabel(c, locale),
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [communes, locale]
+  )
+  const wilayaSearchHint =
+    locale === 'ar'
+      ? 'اختر أو اكتب ولاية (مثال: الجزائر، وهران، سعيدة)...'
+      : 'Sélectionnez ou tapez une wilaya (ex: Alger, Oran, Saïda)...'
+  const communeSearchHint =
+    locale === 'ar'
+      ? 'اختر أو اكتب بلدية...'
+      : 'Sélectionnez ou tapez une commune...'
+
+  const handleWilayaChange = (val: number | '') => {
+    setWilayaId(val)
+    setCommune('') // reset dependent commune when wilaya changes
+  }
+
+  useEffect(() => {
+    const q = searchParams.get('q')
+    const wilaya = searchParams.get('wilaya')
+    const communeParam = searchParams.get('commune')
+    const op = searchParams.get('operation')
+
+    if (q) setQuery(q)
+    if (wilaya) setWilayaId(Number(wilaya))
+    setCommune(communeParam || '')
+    if (op) {
+      setOperation(op as OperationType)
+      setActiveOperation(op as OperationType)
+    }
+  }, [searchParams, setActiveOperation])
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    const filters: Record<string, unknown> = {}
+    if (query.trim()) filters.query = query.trim()
+    if (wilayaId !== '') filters.wilayaId = Number(wilayaId)
+    if (commune) filters.commune = commune
+    if (operation) {
+      filters.operationType = operation
+      setActiveOperation(operation as OperationType)
+    }
+    setFilters(filters)
+
+    const params = new URLSearchParams()
+    if (query.trim()) params.set('q', query.trim())
+    if (wilayaId !== '') params.set('wilaya', String(wilayaId))
+    if (commune) params.set('commune', commune)
+    if (operation) params.set('operation', operation)
+    const queryString = params.toString()
+    navigate(`/listings${queryString ? `?${queryString}` : ''}`)
+  }
+
+  const handleQuickFilter = (wilaya: number, op: OperationType) => {
+    setWilayaId(wilaya)
+    setCommune('')
+    setOperation(op)
+    setActiveOperation(op)
+    setFilters({ wilayaId: wilaya, commune: undefined, operationType: op })
+    navigate(`/listings?wilaya=${wilaya}&operation=${op}`)
+  }
+
+  return (
+    <section className="relative flex min-h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-gradient-to-br from-primary-900 via-primary-800 to-primary-950">
+      {/* Background pattern */}
+      <div className="absolute inset-0 opacity-[0.07]">
+        <div className="absolute inset-0" style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+        }} />
+      </div>
+
+      {/* Ambient glow */}
+      <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-primary-500/20 blur-3xl" />
+      <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-accent-500/10 blur-3xl" />
+
+      <div className="relative mx-auto flex w-full max-w-4xl flex-1 flex-col items-center justify-center px-4 pt-8 pb-28 sm:px-6 sm:py-10 lg:px-8 lg:py-12">
+        {/* Headline */}
+        <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl lg:text-5xl">
+          {t.hero.title}
+        </h1>
+        <p className="mx-auto mt-4 max-w-2xl text-lg text-primary-100/80 sm:text-xl">
+          {t.hero.subtitle}
+        </p>
+
+        {/* Floating Glass Search Island — bounded centered card */}
+        <form onSubmit={handleSearch} className="mx-auto mt-10 w-full min-w-0 max-w-xl sm:px-0 md:max-w-2xl">
+          <div className="glass-strong box-border w-full min-w-0 overflow-hidden rounded-2xl p-2 shadow-soft-xl">
+            {/* Operation Toggle Pills — horizontally scrollable on narrow screens */}
+            <div className="flex w-full min-w-0 items-center gap-2 overflow-x-auto no-scrollbar scrollbar-hide px-2 pb-2">
+              <button
+                type="button"
+                onClick={() => setOperation('')}
+                className={cn(
+                  'shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-all duration-200',
+                  !operation
+                    ? 'bg-primary-600 text-white shadow-glow'
+                    : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
+                )}
+              >
+                {t.filters.all}
+              </button>
+              {OPERATION_TYPES.map((op) => {
+                const Icon = OPERATION_ICONS[op.value] || Home
+                return (
+                  <button
+                    key={op.value}
+                    type="button"
+                    onClick={() => setOperation(op.value)}
+                    className={cn(
+                      'flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-all duration-200',
+                      operation === op.value
+                        ? 'bg-primary-600 text-white shadow-glow'
+                        : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {locale === 'ar' ? op.labelAr : op.labelFr}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Search Input Group — vertical stack on mobile, horizontal from md up */}
+            <div className="flex w-full min-w-0 flex-col gap-2 md:flex-row">
+              {/* Wilaya Combobox — searchable, populated from the Algeria locations dataset */}
+              <div className="min-w-0 md:w-44 md:shrink-0">
+                <SearchableSelect
+                  value={wilayaId === '' ? '' : String(wilayaId)}
+                  onChange={(v) => handleWilayaChange(v ? Number(v) : '')}
+                  options={wilayaOptions}
+                  placeholder={t.filters.allWilayas}
+                  searchPlaceholder={wilayaSearchHint}
+                  className="[&>button]:h-11 [&>button]:bg-white [&>button]:dark:bg-zinc-800"
+                />
+              </div>
+
+              {/* Commune Combobox — searchable, dependent on the selected wilaya */}
+              <div className="min-w-0 md:w-44 md:shrink-0">
+                <SearchableSelect
+                  value={commune}
+                  onChange={(v) => setCommune(v)}
+                  options={communeOptions}
+                  placeholder={
+                    wilayaId === '' ? t.filters.selectWilayaFirst : t.filters.allCommunes
+                  }
+                  searchPlaceholder={communeSearchHint}
+                  disabled={wilayaId === ''}
+                  className="[&>button]:h-11 [&>button]:bg-white [&>button]:dark:bg-zinc-800"
+                />
+              </div>
+
+              {/* Search Input */}
+              <div className="relative min-w-0 flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                <input
+                  type="text"
+                  placeholder={t.hero.searchPlaceholder}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="h-11 w-full rounded-xl border border-zinc-200 bg-white pl-9 pr-3 text-sm text-zinc-900 placeholder:text-zinc-400 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+                />
+              </div>
+
+              {/* Search Button — full width on mobile, auto from md up */}
+              <Button type="submit" size="lg" className="h-auto w-full py-3.5 md:h-11 md:w-auto md:shrink-0 md:py-0">
+                <Search className="h-4 w-4" />
+                {t.hero.search}
+              </Button>
+            </div>
+          </div>
+        </form>
+
+        {/* Legal Status Filter */}
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+          <span className="text-xs text-primary-100/60">
+            {locale === 'ar' ? 'الوثائق القانونية' : 'Statut juridique'}:
+          </span>
+          <select
+            value={filters.legalStatus ?? ''}
+            onChange={(e) => {
+              const val = (e.target.value || undefined) as LegalStatus | undefined
+              setFilters({ legalStatus: val })
+            }}
+            className="h-9 rounded-full border border-white/20 bg-white/10 px-3 text-sm text-white backdrop-blur-sm transition-all hover:border-white/40 focus:border-white/60 focus:outline-none [&>option]:text-zinc-900"
+          >
+            <option value="">{t.filters.allLegal}</option>
+            {LEGAL_STATUS.map((ls) => (
+              <option key={ls.value} value={ls.value}>
+                {locale === 'ar' ? ls.labelAr : ls.labelFr}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Quick Filter Chips — localized per current locale */}
+        <div className="mt-4 flex w-full min-w-0 flex-nowrap items-center justify-start gap-2 overflow-x-auto no-scrollbar scrollbar-hide sm:justify-center">
+          {QUICK_FILTERS.map((chip) => (
+            <button
+              key={`${chip.wilaya}-${chip.operation}`}
+              onClick={() => handleQuickFilter(chip.wilaya, chip.operation)}
+              className="shrink-0 whitespace-nowrap rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-white/90 backdrop-blur-sm transition-all duration-200 hover:border-white/40 hover:bg-white/20 hover:text-white"
+            >
+              {locale === 'ar' ? chip.labelAr : chip.labelFr}
+            </button>
+          ))}
+        </div>
+
+        {/* Quick Stats */}
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-6 text-primary-100/70">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-bold text-white">58</span>
+            <span className="text-sm">Wilayas</span>
+          </div>
+          <div className="h-4 w-px bg-primary-400/30" />
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-bold text-white">1000+</span>
+            <span className="text-sm">Annonces</span>
+          </div>
+          <div className="h-4 w-px bg-primary-400/30" />
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-bold text-white">500+</span>
+            <span className="text-sm">Utilisateurs</span>
+          </div>
+        </div>
+
+        {/* Trust badge */}
+        <div className="mt-8 flex items-center justify-center gap-2 text-sm text-primary-100/50">
+          <TrendingUp className="h-4 w-4" />
+          <span>Plateforme N°1 de l'immobilier en Algérie</span>
+        </div>
+      </div>
+    </section>
+  )
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Sakan DZ | سكن دزاير",
+  "short_name": "Sakan DZ",
+  "description": "Plateforme immobilière algérienne - دارنا",
+  "theme_color": "#059669",
+  "background_color": "#0f172a",
+  "display": "standalone",
+  "dir": "ltr",
+  "lang": "fr",
+  "start_url": "/",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
