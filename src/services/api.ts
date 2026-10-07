@@ -3,6 +3,7 @@ import type { Property, SearchFilters } from '@/types'
 import type { Agent } from '@/types'
 import { WILAYAS } from '@/constants'
 import { normalizeLatLng } from '@/lib/mapHelpers'
+import { dedupedQuery, invalidateQueries } from '@/lib/queryCache'
 
 // Re-export Agent type for consumers importing from services
 export type { Agent }
@@ -140,8 +141,25 @@ function buildPropertyQuery(filters?: SearchFilters) {
 /* Properties — 100% live, no mock fallback                            */
 /* ------------------------------------------------------------------ */
 
-/** Fetch live listings. Returns [] when the table is empty or on error. */
+/** Fetch live listings. Returns [] when the table is empty or on error.
+ *
+ * Queries are deduplicated + briefly cached: concurrent callers (e.g. one
+ * PropertyCard hook per card in a grid) share a single request, and
+ * page-transition remounts reuse fresh results instead of refetching.
+ * Call `invalidatePropertiesCache()` after mutations (publish/delete).
+ */
 export async function fetchProperties(filters?: SearchFilters): Promise<Property[]> {
+  const key = `props:${JSON.stringify(filters ?? {})}`
+  return dedupedQuery(key, () => fetchPropertiesUncached(filters))
+}
+
+/** Drop cached listings so the next read hits the network. */
+export function invalidatePropertiesCache(): void {
+  invalidateQueries('props:')
+  invalidateQueries('featured:')
+}
+
+async function fetchPropertiesUncached(filters?: SearchFilters): Promise<Property[]> {
   const { data, error } = await buildPropertyQuery(filters)
 
   if (error) {
@@ -229,6 +247,10 @@ export async function incrementPropertyViews(propertyId: string): Promise<void> 
 
 /** Fetch featured properties for the home page. */
 export async function fetchFeaturedProperties(limit = 4): Promise<Property[]> {
+  return dedupedQuery(`featured:${limit}`, () => fetchFeaturedUncached(limit))
+}
+
+async function fetchFeaturedUncached(limit: number): Promise<Property[]> {
   const { data, error } = await supabase
     .from('properties')
     .select('*')

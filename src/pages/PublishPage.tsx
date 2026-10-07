@@ -8,6 +8,7 @@ import { useLocale } from '@/i18n'
 import { WILAYAS_58, getWilayaByCode, getCommunesByWilaya, wilayaLabel, communeLabel, communeValue } from '@/data/algeria-locations'
 import { useAuth } from '../contexts/AuthContext'
 import { uploadPropertyImages } from '../services/storage'
+import { invalidatePropertiesCache } from '@/services/api'
 import { supabase } from '@/lib/supabase'
 import { sanitizeText } from '@/lib/sanitize'
 import { LocationPicker } from '@/components/map/LocationPicker'
@@ -271,7 +272,9 @@ export function PublishPage() {
 
       if (error) throw error
 
-      // 3. Success: confirmation + redirect to /listings
+      // 3. Success: drop cached listings so the new ad appears immediately
+      // on /listings despite the shared query cache, then redirect.
+      invalidatePropertiesCache()
       setSubmitted(true)
       window.alert(
         locale === 'ar' ? 'تم نشر إعلانك بنجاح!' : 'Votre annonce a été publiée avec succès !'

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Property, SearchFilters } from '@/types'
-import { fetchProperties } from '@/services/api'
+import { fetchProperties, invalidatePropertiesCache } from '@/services/api'
 
 interface UsePropertiesReturn {
   properties: Property[]
@@ -55,6 +55,9 @@ export function useProperties(filters?: SearchFilters): UsePropertiesReturn {
   }, [filtersKey, nonce])
 
   const refetch = useCallback(() => {
+    // Bypass the shared query cache so an explicit refresh always
+    // hits the network (e.g. after deleting a listing).
+    invalidatePropertiesCache()
     setNonce((n) => n + 1)
   }, [])
 
