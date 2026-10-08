@@ -43,6 +43,20 @@ function resolveWilayaId(row: Record<string, unknown>): number {
   return match ? match.id : 16
 }
 
+const VALID_CURRENCIES = ['DZD', 'EUR', 'USD'] as const
+
+/**
+ * Coerce any raw currency value to a safe Currency, defaulting to 'DZD'.
+ * `?? 'DZD'` alone is not enough: empty strings or unexpected codes pass
+ * through and crash Intl.NumberFormat downstream (RangeError).
+ */
+function toSafeCurrency(value: unknown): Property['currency'] {
+  return typeof value === 'string' &&
+    (VALID_CURRENCIES as readonly string[]).includes(value)
+    ? (value as Property['currency'])
+    : 'DZD'
+}
+
 function mapRowToProperty(row: Record<string, unknown>): Property {
   const pick = (...keys: string[]) => {
     for (const k of keys) {
@@ -69,7 +83,7 @@ function mapRowToProperty(row: Record<string, unknown>): Property {
     operationType: (pick('operation', 'operation_type', 'operationType') as Property['operationType']) ?? 'sale',
     propertyType: (pick('property_type', 'propertyType') as Property['propertyType']) ?? 'apartment',
     price: Number(pick('price') ?? 0),
-    currency: ((pick('currency') as string) ?? 'DZD') as Property['currency'],
+    currency: toSafeCurrency(pick('currency')),
     pricePerNight: (pick('price_per_night', 'pricePerNight') as number | undefined) ?? undefined,
     wilayaId: resolveWilayaId(row),
     daira: (pick('daira') as string | undefined) ?? undefined,
@@ -327,21 +341,24 @@ async function fetchFeaturedUncached(limit: number): Promise<Property[]> {
 }
 
 /* ------------------------------------------------------------------ */
-/* Agents — live profiles (role in ('agent', 'agency')). No fallback.   */
+/* Agents — seller directory. profiles.role is CHECK-constrained to     */
+/* ('buyer', 'seller'), so sellers ARE the agents/agencies. No fallback. */
 /* ------------------------------------------------------------------ */
 
 export async function fetchAgents(wilaya?: string): Promise<Agent[]> {
   try {
-    let query = supabase
-      .from('profiles')
-      .select('*')
-      .in('role', ['agent', 'agency', 'user'])
+    let query = supabase.from('profiles').select('*').eq('role', 'seller')
 
     if (wilaya && wilaya !== 'all' && wilaya !== 'جميع الولايات') {
-      query = query.eq('wilaya', wilaya)
+      // profiles stores wilaya_id (INTEGER) — resolve names/ids via WILAYAS.
+      // Unresolvable input skips the filter instead of erroring the query.
+      const match = WILAYAS.find(
+        (w) => w.name === wilaya || w.nameAr === wilaya || String(w.id) === String(wilaya)
+      )
+      if (match) query = query.eq('wilaya_id', match.id)
     }
 
-    const { data, error } = await query.order('rating', { ascending: false }).limit(50)
+    const { data, error } = await query.order('created_at', { ascending: false }).limit(50)
 
     console.log('Fetched agents raw data:', data, error)
 
