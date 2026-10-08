@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
-import { LocateFixed, Loader2 } from 'lucide-react'
+import { LocateFixed, Loader2, AlertTriangle, X } from 'lucide-react'
 import { useLocale } from '@/i18n'
 import { MAP_DEFAULT_CENTER } from '@/constants'
 import {
@@ -29,6 +29,17 @@ function FlyToWilaya({ center }: { center: [number, number] | null }) {
     // Smooth pan/fly when the user picks a Wilaya.
     map.flyTo(center, 12, { duration: 1.5 })
   }, [map, key]) // eslint-disable-line react-hooks/exhaustive-deps
+  return null
+}
+
+/** Pans to an explicit GPS fix (zoomed in). Only fires on new signals,
+ *  never on drag/click, so the map doesn't yank while placing the pin. */
+function FlyToGpsFix({ signal }: { signal: { lat: number; lng: number; nonce: number } | null }) {
+  const map = useMap()
+  useEffect(() => {
+    if (!signal) return
+    map.flyTo([signal.lat, signal.lng], 14, { duration: 1.2 })
+  }, [map, signal])
   return null
 }
 
@@ -71,6 +82,14 @@ export function LocationPicker({
   const { locale } = useLocale()
   const [gpsLoading, setGpsLoading] = useState(false)
   const [gpsError, setGpsError] = useState<string | null>(null)
+  const [gpsFix, setGpsFix] = useState<{ lat: number; lng: number; nonce: number } | null>(null)
+
+  // Toast behavior: auto-dismiss GPS errors after a few seconds.
+  useEffect(() => {
+    if (!gpsError) return
+    const timer = window.setTimeout(() => setGpsError(null), 5000)
+    return () => window.clearTimeout(timer)
+  }, [gpsError])
 
   const hasPin = typeof latitude === 'number' && typeof longitude === 'number'
   const valid = hasPin && isValidAlgeriaLatLng(latitude, longitude)
@@ -85,22 +104,43 @@ export function LocationPicker({
 
   const initialZoom = hasPin ? 13 : wilayaCenter ? 11 : 6
 
-  const handleGps = () => {
+  const handleGps = async () => {
     if (!('geolocation' in navigator)) {
       setGpsError(locale === 'ar' ? 'المتصفح لا يدعم GPS' : 'GPS non supporté')
       return
     }
     setGpsLoading(true)
     setGpsError(null)
+    // Pre-check permission state when supported, so a blocked GPS gives an
+    // immediate actionable message instead of waiting for a timeout.
+    try {
+      const perms = navigator.permissions as Permissions | undefined
+      if (perms?.query) {
+        const status = await perms.query({ name: 'geolocation' as PermissionName })
+        if (status.state === 'denied') {
+          setGpsLoading(false)
+          setGpsError(
+            locale === 'ar'
+              ? 'تم حظر الوصول إلى الموقع — فعّله من إعدادات المتصفح/الجهاز وتأكد أن GPS مفعّل ثم حاول مجددًا'
+              : 'Accès à la localisation bloqué — activez-le dans les réglages du navigateur/appareil et vérifiez que le GPS est activé, puis réessayez'
+          )
+          return
+        }
+      }
+    } catch {
+      // Permissions API unavailable — fall through to getCurrentPosition,
+      // which will surface the real error via its error callback.
+    }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords
         const fixed = normalizeLatLng(lat, lng)
-        if (fixed) {
-          onChange(fixed.lat, fixed.lng)
-        } else {
+        const target = fixed ?? { lat, lng }
+        onChange(target.lat, target.lng)
+        // Pan the map directly to the detected location.
+        setGpsFix((prev) => ({ lat: target.lat, lng: target.lng, nonce: (prev?.nonce ?? 0) + 1 }))
+        if (!fixed) {
           // Still place the pin, but warn when outside Algeria.
-          onChange(lat, lng)
           setGpsError(
             locale === 'ar'
               ? 'موقعك خارج الجزائر — حرّك الدبوس يدويًا'
@@ -109,21 +149,44 @@ export function LocationPicker({
         }
         setGpsLoading(false)
       },
-      () => {
+      (err) => {
         setGpsLoading(false)
-        setGpsError(
-          locale === 'ar'
-            ? 'تعذّر الحصول على الموقع — اسمح بالوصول أو حرّك الدبوس'
-            : 'Position indisponible — autorisez l’accès ou déplacez le pin'
-        )
+        // err.code === 1 PERMISSION_DENIED: blocked in browser/OS settings.
+        if (typeof err.code === 'number' && err.code === 1) {
+          setGpsError(
+            locale === 'ar'
+              ? 'تم رفض إذن الموقع — فعّله من إعدادات المتصفح ثم حاول مجددًا'
+              : 'Permission de localisation refusée — activez-la dans le navigateur puis réessayez'
+          )
+        } else if (typeof err.code === 'number' && err.code === 2) {
+          // POSITION_UNAVAILABLE: device GPS off or no fix (indoors/no signal).
+          setGpsError(
+            locale === 'ar'
+              ? 'تعذّر تحديد الموقع — تأكد أن GPS الجهاز مفعّل وأنك في مكان مفتوح ثم حاول مجددًا'
+              : 'Position indisponible — vérifiez que le GPS de l’appareil est activé et réessayez en extérieur'
+          )
+        } else if (typeof err.code === 'number' && err.code === 3) {
+          // TIMEOUT: fix took longer than 10s — GPS off, weak signal, or blocked.
+          setGpsError(
+            locale === 'ar'
+              ? 'انتهت مهلة تحديد الموقع — تأكد أن GPS مفعّل وحاول مجددًا في مكان مفتوح'
+              : 'Délai de localisation dépassé — vérifiez que le GPS est activé et réessayez en extérieur'
+          )
+        } else {
+          setGpsError(
+            locale === 'ar'
+              ? 'تعذّر الحصول على الموقع — اسمح بالوصول أو حرّك الدبوس'
+              : 'Position indisponible — autorisez l’accès ou déplacez le pin'
+          )
+        }
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     )
   }
 
   return (
     <div className="space-y-2">
-      <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
+      <div className="relative overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
         <MapContainer
           center={initialCenter}
           zoom={initialZoom}
@@ -135,6 +198,7 @@ export function LocationPicker({
             attribution={getTileLayerAttribution()}
           />
           <FlyToWilaya center={wilayaCenter} />
+          <FlyToGpsFix signal={gpsFix} />
           <ClickToPlace onChange={onChange} />
           {hasPin && (
             <Marker
@@ -153,6 +217,23 @@ export function LocationPicker({
             />
           )}
         </MapContainer>
+        {/* Error toast over the map (auto-dismisses) */}
+        {gpsError && (
+          <div className="absolute left-1/2 top-3 z-[1000] w-[calc(100%-1.5rem)] max-w-sm -translate-x-1/2 animate-slide-down">
+            <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-white/95 px-3 py-2 shadow-soft-lg backdrop-blur dark:border-rose-900/50 dark:bg-zinc-900/95">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />
+              <p className="flex-1 text-xs text-zinc-700 dark:text-zinc-300">{gpsError}</p>
+              <button
+                type="button"
+                onClick={() => setGpsError(null)}
+                className="shrink-0 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                aria-label={locale === 'ar' ? 'إغلاق' : 'Fermer'}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Hidden fields keep the form payload explicit: latitude (18..38), longitude (-9..12) */}
@@ -171,7 +252,7 @@ export function LocationPicker({
           ) : (
             <LocateFixed className="h-4 w-4" />
           )}
-          {locale === 'ar' ? 'استخدم موقعي الحالي (GPS)' : 'Utiliser ma position (GPS)'}
+          {locale === 'ar' ? 'تحديد موقعي بدقة (GPS)' : 'Détecter ma position (GPS)'}
         </button>
         <p
           className="text-xs text-zinc-500 dark:text-zinc-400"
@@ -205,11 +286,6 @@ export function LocationPicker({
         </p>
       </div>
 
-      {gpsError && (
-        <p className="rounded-xl bg-amber-50 p-2 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
-          {gpsError}
-        </p>
-      )}
     </div>
   )
 }

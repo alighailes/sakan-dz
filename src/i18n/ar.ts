@@ -302,6 +302,16 @@ const ar: TranslationKeys = {
     active: 'نشط',
     inactive: 'غير نشط',
   },
+  notifications: {
+    enableNew: 'تفعيل إشعارات العقارات الجديدة',
+    prompt: 'احصل على تنبيه فوري عند نشر عقارات تطابق بحثك.',
+    enable: 'تفعيل',
+    disable: 'تعطيل',
+    on: 'مفعّلة',
+    off: 'متوقفة',
+    later: 'لاحقاً',
+    deniedHint: 'الإشعارات محظورة في المتصفح — فعّلها من الإعدادات.',
+  },
   contract: {
     title: 'توليد عقد كراء نموذجي',
     landlordInfo: 'معلومات المالك',

@@ -6,6 +6,7 @@ import { useThemeStore } from '@/stores/themeStore'
 import { useLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/authStore'
 import { CurrencyToggle } from '@/components/CurrencyToggle'
+import { NotificationToggle } from '@/components/NotificationToggle'
 import { cn } from '@/lib/utils'
 
 export function Navbar() {
@@ -190,6 +191,7 @@ export function Navbar() {
                       <MessageCircle className="h-4 w-4" />
                       {t.nav.messages}
                     </Link>
+                    <NotificationToggle onDone={() => setUserMenuOpen(false)} />
                   </div>
 
                   {/* Sign Out */}
@@ -299,6 +301,10 @@ export function Navbar() {
                   <Bookmark className="h-4 w-4" />
                   {t.nav.savedSearches}
                 </Link>
+                <NotificationToggle
+                  onDone={() => setMobileOpen(false)}
+                  className="rounded-lg px-3 py-2.5 font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                />
                 <button
                   onClick={() => {
                     setMobileOpen(false)

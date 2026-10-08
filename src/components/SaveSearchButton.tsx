@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { useLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/authStore'
 import { useSearchStore } from '@/stores/searchStore'
+import { signalPushNudge } from '@/services/notifications'
 import { cn } from '@/lib/utils'
 
 interface SaveSearchButtonProps {
@@ -33,6 +34,8 @@ export function SaveSearchButton({ onSave, className }: SaveSearchButtonProps) {
     localStorage.setItem('sakan-saved-searches', JSON.stringify(savedSearches))
     setSaved(true)
     onSave?.()
+    // Contextual moment to suggest push alerts for this search.
+    signalPushNudge()
 
     setTimeout(() => setSaved(false), 2000)
   }

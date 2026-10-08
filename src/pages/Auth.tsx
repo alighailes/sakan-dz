@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { WILAYAS } from '@/constants'
 import { cn } from '@/lib/utils'
 import { sanitizeText, sanitizeEmail, sanitizePhone } from '@/lib/sanitize'
+import { signalPushNudge } from '@/services/notifications'
 import type { UserType } from '@/types'
 
 type AuthView = 'login' | 'register' | 'forgot'
@@ -67,6 +68,7 @@ export function AuthPage() {
 
     try {
       await signInWithPassword(loginEmail, loginPassword)
+      signalPushNudge()
       navigate(from, { replace: true })
     } catch {
       // Error is handled by the store
@@ -100,6 +102,7 @@ export function AuthPage() {
         agency_name: regUserType === 'agency' ? sanitizeText(regAgencyName) : undefined,
         wilaya_id: regWilayaId,
       })
+      signalPushNudge()
       navigate(from, { replace: true })
     } catch {
       // Error is handled by the store

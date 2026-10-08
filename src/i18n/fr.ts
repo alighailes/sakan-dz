@@ -308,6 +308,16 @@ const fr = {
     active: 'Active',
     inactive: 'Inactive',
   },
+  notifications: {
+    enableNew: 'Activer les alertes des nouveaux biens',
+    prompt: 'Soyez alerté dès qu’un bien correspondant à vos recherches est publié.',
+    enable: 'Activer',
+    disable: 'Désactiver',
+    on: 'Activées',
+    off: 'Coupées',
+    later: 'Plus tard',
+    deniedHint: 'Notifications bloquées dans le navigateur — réactivez-les dans les réglages.',
+  },
   contract: {
     title: 'Générateur de contrat de location',
     landlordInfo: 'Informations du propriétaire',
