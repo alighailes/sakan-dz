@@ -13,6 +13,7 @@ import { MessagesPage } from '@/pages/MessagesPage'
 import { PublishPage } from '@/pages/PublishPage'
 import { PropertyDetailPage } from '@/pages/PropertyDetailPage'
 import { AuthPage } from '@/pages/Auth'
+import { ProfilePage } from '@/pages/ProfilePage'
 import { ResetPasswordPage } from '@/pages/ResetPasswordPage'
 import { MyListingsPage } from '@/pages/MyListingsPage'
 import { SavedSearchesPage } from '@/pages/SavedSearchesPage'
@@ -47,6 +48,14 @@ export default function App() {
           <Route path="/favorites" element={<FavoritesPage />} />
           <Route path="/messages" element={<MessagesPage />} />
           <Route path="/auth" element={<AuthPage />} />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/saved-searches" element={<SavedSearchesPage />} />
           <Route path="/contract" element={<ContractGeneratorPage />} />

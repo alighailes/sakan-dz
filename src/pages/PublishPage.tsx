@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowRight, Check, ImagePlus, Loader2, LogIn, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -7,10 +7,11 @@ import { Select } from '@/components/ui/select'
 import { useLocale } from '@/i18n'
 import { WILAYAS_58, getWilayaByCode, getCommunesByWilaya, wilayaLabel, communeLabel, communeValue } from '@/data/algeria-locations'
 import { useAuth } from '../contexts/AuthContext'
+import { useAuthStore } from '@/stores/authStore'
 import { uploadPropertyImages } from '../services/storage'
 import { invalidatePropertiesCache } from '@/services/api'
 import { supabase } from '@/lib/supabase'
-import { sanitizeText } from '@/lib/sanitize'
+import { sanitizePhone, sanitizeText } from '@/lib/sanitize'
 import { LocationPicker } from '@/components/map/LocationPicker'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { isValidAlgeriaLatLng, normalizeLatLng } from '@/lib/mapHelpers'
@@ -64,11 +65,14 @@ function formatPublishError(err: unknown): string {
 export function PublishPage() {
   const navigate = useNavigate()
   const { locale, t } = useLocale()
-  const { user, loading: authLoading } = useAuth()
+  const { user, profile: authProfile, loading: authLoading } = useAuth()
+  const storeProfile = useAuthStore((s) => s.profile)
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [price, setPrice] = useState('')
+  const [phone, setPhone] = useState('')
+  const [phoneTouched, setPhoneTouched] = useState(false)
   const [operation, setOperation] = useState('sale')
   const [propertyType, setPropertyType] = useState('apartment')
   const [legalStatus, setLegalStatus] = useState('acte_livret')
@@ -90,6 +94,42 @@ export function PublishPage() {
   // lat (North) must stay in ~18..38, lng (East) in ~-9..12.
   const [latitude, setLatitude] = useState<number | null>(null)
   const [longitude, setLongitude] = useState<number | null>(null)
+
+  // Auto-fill phone from the logged-in user's profiles.phone_number.
+  // Store profile first (handles mock mode), then context profile, then a
+  // direct profiles lookup as a last resort. Never overwrites manual edits.
+  useEffect(() => {
+    if (phoneTouched || phone) return
+    const fromStore = storeProfile?.phone_number?.trim()
+    const fromCtx = (authProfile as { phone_number?: string } | null)?.phone_number?.trim()
+    if (fromStore) {
+      setPhone(fromStore)
+      return
+    }
+    if (fromCtx) {
+      setPhone(fromCtx)
+      return
+    }
+    if (!user) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('phone_number')
+          .eq('id', user.id)
+          .single()
+        if (cancelled) return
+        const fetched = (data as { phone_number?: string } | null)?.phone_number?.trim()
+        if (fetched) setPhone(fetched)
+      } catch {
+        // No profile phone available — field stays manual.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [phoneTouched, phone, storeProfile, authProfile, user])
 
   if (authLoading) {
     return (
@@ -209,6 +249,8 @@ export function PublishPage() {
     typeof longitude === 'number' &&
     isValidAlgeriaLatLng(latitude, longitude)
 
+  const phoneOk = phone.trim() === '' || sanitizePhone(phone) !== ''
+
   const canSubmit =
     title.trim().length >= 3 &&
     description.trim().length >= 10 &&
@@ -216,7 +258,8 @@ export function PublishPage() {
     wilayaCode !== '' &&
     commune.trim().length > 0 &&
     Number(surface) > 0 &&
-    hasValidLocation
+    hasValidLocation &&
+    phoneOk
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -244,6 +287,7 @@ export function PublishPage() {
       // and already normalized (inverted [lng, lat] pairs auto-swapped).
       const wilayaName = getWilayaByCode(wilayaCode)?.name_fr ?? ''
       const coords = normalizeLatLng(latitude, longitude)
+      const cleanPhone = sanitizePhone(phone)
       const { error } = await supabase.from('properties').insert({
         title: sanitizeText(title),
         description: sanitizeText(description),
@@ -268,6 +312,9 @@ export function PublishPage() {
         user_id: user.id,
         owner_id: user.id,
         owner_name: user.email ?? '',
+        // Actual column is owner_phone (TEXT, nullable) — task's
+        // `properties.phone` maps here.
+        owner_phone: cleanPhone || null,
       })
 
       if (error) throw error
@@ -527,6 +574,32 @@ export function PublishPage() {
             )}
             {checkboxRow(hasGarage, setHasGarage, locale === 'ar' ? 'مرآب' : 'Garage')}
           </div>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-start text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            {locale === 'ar' ? 'رقم الهاتف' : 'Téléphone'}
+          </label>
+          <Input
+            type="tel"
+            dir="ltr"
+            value={phone}
+            onChange={(e) => {
+              setPhone(e.target.value)
+              setPhoneTouched(true)
+            }}
+            placeholder="0550123456"
+          />
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            {locale === 'ar'
+              ? 'يُملأ تلقائياً من حسابك — صيغة جزائرية: 05/06/07 + 8 أرقام'
+              : 'Pré-rempli depuis votre compte — format algérien : 05/06/07 + 8 chiffres'}
+          </p>
+          {!phoneOk && (
+            <p className="mt-1 text-xs text-red-500">
+              {locale === 'ar' ? 'رقم الهاتف غير صالح (05/06/07...)' : 'Numéro invalide (05/06/07...)'}
+            </p>
+          )}
         </div>
 
         <div>

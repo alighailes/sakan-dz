@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Heart, BedDouble, Bath, MapPin, Eye, Share2, FileText, ChevronLeft, ChevronRight } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useProperties } from '@/hooks/useProperties'
 import { useFavoritesStore } from '@/stores/favoritesStore'
@@ -11,7 +11,7 @@ import { getOperationLabelFr, getPropertyTypeLabelFr, getLegalStatusLabelFr } fr
 import { formatPrice as formatPriceWithMode, getAlternativePrice } from '@/lib/currencyUtils'
 import { WILAYAS } from '@/constants'
 import { cn } from '@/lib/utils'
-import { ContactButtons } from '@/components/ContactButtons'
+import { ContactButtons, formatPhoneForWhatsApp, getPropertyPhone } from '@/components/ContactButtons'
 import { ShareModal } from '@/components/ShareModal'
 import { VipBadge } from '@/components/VipBadge'
 import { VerifiedBadge } from '@/components/VerifiedBadge'
@@ -81,6 +81,14 @@ export function PropertyDetailPage() {
     : getAlternativePrice(property.price, property.currency, mode, locale)
 
   const allImages = property.images.length > 0 ? property.images : ['https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800']
+
+  // Seller phone with legacy fallbacks (property.phone / profiles join / ownerPhone).
+  const sellerPhone = getPropertyPhone(property)
+  const waPhone = sellerPhone ? formatPhoneForWhatsApp(sellerPhone) : null
+  const waHref = sellerPhone && waPhone
+    ? `https://wa.me/${waPhone}?text=${encodeURIComponent('سلام عليكم، أنا مهتم بعقارك: ' + property.title)}`
+    : null
+  const telHref = sellerPhone ? `tel:${sellerPhone}` : null
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 pb-24 md:pb-6">
@@ -350,8 +358,12 @@ export function PropertyDetailPage() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-zinc-900 dark:text-white">{property.ownerName}</p>
-                  {property.ownerPhone && (
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">{property.ownerPhone}</p>
+                  {sellerPhone ? (
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">{sellerPhone}</p>
+                  ) : (
+                    <p className="mt-1 inline-flex rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                      {locale === 'ar' ? 'رقم الهاتف غير متوفر' : 'Numéro indisponible'}
+                    </p>
                   )}
                 </div>
               </div>
@@ -367,40 +379,28 @@ export function PropertyDetailPage() {
             <div className="flex-1">
               <p className="text-lg font-bold text-primary-600 dark:text-primary-400">{priceLabel}</p>
             </div>
-            <Button
-              variant="whatsapp"
-              className="flex-1 gap-2"
-              onClick={() => {
-                if (!property.ownerPhone) return
-                const digits = property.ownerPhone.replace(/\D/g, '')
-                const phone = digits.startsWith('0') && digits.length === 10
-                  ? `213${digits.slice(1)}`
-                  : digits
-                const message = encodeURIComponent(
-                  locale === 'ar'
-                    ? `سلام عليكم، أنا مهتم بعقارك: ${property.title}`
-                    : `Bonjour, je suis intéressé par votre bien: ${property.title}`
-                )
-                window.open(`https://wa.me/${phone}?text=${message}`, '_blank')
-              }}
-            >
-              WhatsApp
-            </Button>
-            {property.ownerPhone && (
-              <Button
-                variant="outline"
-                className="flex-1 gap-2"
-                onClick={() => {
-                  const digits = property.ownerPhone!.replace(/\D/g, '')
-                  const phone = digits.startsWith('0') && digits.length === 10
-                    ? `+213${digits.slice(1)}`
-                    : `+${digits}`
-                  window.location.href = `tel:${phone}`
-                }}
+            {waHref ? (
+              <a
+                href={waHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(buttonVariants({ variant: 'whatsapp' }), 'flex-1 gap-2')}
               >
-                Appeler
-              </Button>
+                {locale === 'ar' ? 'تواصل عبر واتساب' : 'WhatsApp'}
+              </a>
+            ) : (
+              <span className="inline-flex flex-1 items-center justify-center rounded-xl bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                {locale === 'ar' ? 'رقم الهاتف غير متوفر' : 'Numéro indisponible'}
+              </span>
             )}
+            {telHref ? (
+              <a
+                href={telHref}
+                className={cn(buttonVariants({ variant: 'outline' }), 'flex-1 gap-2')}
+              >
+                {locale === 'ar' ? 'اتصال مباشر' : 'Appeler'}
+              </a>
+            ) : null}
           </div>
         </div>
       </div>

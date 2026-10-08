@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useLocation, useNavigate, Link } from 'react-router-dom'
+import { useLocation, useNavigate, Link, Navigate } from 'react-router-dom'
 import { Mail, Lock, User, Phone, Building2, Eye, EyeOff, ArrowLeft, Check, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,7 +21,7 @@ export function AuthPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { locale, t } = useLocale()
-  const { signUp, signInWithPassword, resetPassword, loading, error, clearError } = useAuthStore()
+  const { signUp, signInWithPassword, resetPassword, loading, error, clearError, user } = useAuthStore()
 
   // Login form
   const [loginEmail, setLoginEmail] = useState('')
@@ -45,6 +45,11 @@ export function AuthPage() {
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const from = (location.state as { from?: string })?.from || '/'
+
+  // Route guard: authenticated users should never see the login form.
+  if (user) {
+    return <Navigate to="/profile" replace />
+  }
 
   const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
   const validatePhone = (phone: string) => /^(0)(5|6|7)[0-9]{8}$/.test(phone.replace(/\s/g, ''))
