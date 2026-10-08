@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { User, Session } from '@supabase/supabase-js'
-import { supabase, isSupabaseConfigured } from '@/lib/supabase'
+import { supabase, isSupabaseConfigured, readCachedSupabaseSession } from '@/lib/supabase'
 import type { UserProfile } from '@/types'
 
 interface AuthContextType {
@@ -24,9 +24,13 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
+  // Seed synchronously from Supabase's cached localStorage session so the
+  // first paint already holds the signed-in state (no logged-out flash).
+  // getSession() in initAuth below still revalidates and wins on resolve.
+  const [cached] = useState(() => readCachedSupabaseSession())
+  const [user, setUser] = useState<User | null>(cached?.user ?? null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [session, setSession] = useState<Session | null>(null)
+  const [session, setSession] = useState<Session | null>(cached?.session ?? null)
   const [loading, setLoading] = useState(true)
 
   // Fetch profile from profiles table

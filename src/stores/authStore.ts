@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { supabase, isSupabaseConfigured } from '@/lib/supabase'
+import { supabase, isSupabaseConfigured, readCachedSupabaseSession } from '@/lib/supabase'
 import type { User, Session } from '@supabase/supabase-js'
 import type { UserProfile, UserType, UserRole } from '@/types'
 
@@ -212,9 +212,14 @@ function createMockSession(mockUser: MockUser): Session {
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
-      user: null,
+      // Sync cold-boot seed from Supabase's cached session: first paint
+      // holds the signed-in state instead of flashing logged-out UI.
+      // initialize()/onAuthStateChange revalidate and win on resolve.
+      // (persist partialize only keeps isMockMode, so this is never
+      // overwritten by stale rehydrated auth state.)
+      user: readCachedSupabaseSession()?.user ?? null,
       profile: null,
-      session: null,
+      session: readCachedSupabaseSession()?.session ?? null,
       loading: true,
       error: null,
       isMockMode: false,

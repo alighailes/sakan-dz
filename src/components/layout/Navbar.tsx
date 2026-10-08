@@ -15,7 +15,7 @@ export function Navbar() {
   const userMenuRef = useRef<HTMLDivElement>(null)
   const { theme, toggleTheme } = useThemeStore()
   const { locale, setLocale, t } = useLocale()
-  const { user, profile, signOut, updateRole, activeRole } = useAuthStore()
+  const { user, profile, signOut, updateRole, activeRole, loading: authLoading } = useAuthStore()
   const location = useLocation()
   const navigate = useNavigate()
   const isSeller = activeRole === 'seller'
@@ -219,6 +219,11 @@ export function Navbar() {
                 </div>
               )}
             </div>
+          ) : authLoading ? (
+            <div
+              aria-hidden="true"
+              className="hidden h-8 w-20 animate-pulse rounded-lg bg-zinc-200 sm:block dark:bg-zinc-800"
+            />
           ) : (
             <Link to="/auth" className="hidden sm:block">
               <Button size="sm" variant="outline">
