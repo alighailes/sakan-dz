@@ -4,6 +4,8 @@ import { ArrowLeft, Heart, BedDouble, Bath, MapPin, Eye, Share2, FileText, Chevr
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useProperties } from '@/hooks/useProperties'
+import { fetchPropertyById } from '@/services/api'
+import type { Property } from '@/types'
 import { useFavoritesStore } from '@/stores/favoritesStore'
 import { useLocale } from '@/i18n'
 import { useCurrencyStore } from '@/stores/currencyStore'
@@ -26,7 +28,7 @@ import { calculatePriceBenchmark } from '@/lib/priceBenchmark'
 
 export function PropertyDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const { properties, loading } = useProperties()
+  const { properties, loading } = useProperties(undefined, { limit: 100 })
   const { toggleFavorite, isFavorite } = useFavoritesStore()
   const { locale, t } = useLocale()
   const { mode } = useCurrencyStore()
@@ -35,7 +37,25 @@ export function PropertyDetailPage() {
   const [showPhone] = useState(false)
   const [activeImageIndex, setActiveImageIndex] = useState(0)
 
-  const property = properties.find((p) => p.id === id)
+  // Full-row fetch for the target property: feeds use the lean card-column
+  // projection (no booked_dates/cleaning_fee/*_ar), so the detail page loads
+  // the complete row itself. Falls back to the feed row while loading.
+  const [fullProperty, setFullProperty] = useState<Property | null>(null)
+  useEffect(() => {
+    setFullProperty(null)
+    if (!id) return
+    let cancelled = false
+    fetchPropertyById(id)
+      .then(({ property }) => {
+        if (!cancelled && property) setFullProperty(property)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [id])
+
+  const property = fullProperty ?? properties.find((p) => p.id === id)
 
   // Increment live view counter once per visit
   useEffect(() => {

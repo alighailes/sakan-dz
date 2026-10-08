@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 
 export function AgencyPage() {
   const { agencyId } = useParams<{ agencyId: string }>()
-  const { properties } = useProperties()
+  const { properties } = useProperties(undefined, { limit: 100 })
   const { t } = useLocale()
 
   const agencyProperties = properties.filter((p) => p.agencyId === agencyId || p.ownerId === agencyId)

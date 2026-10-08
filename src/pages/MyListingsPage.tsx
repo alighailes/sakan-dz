@@ -18,7 +18,7 @@ import { PropertyCardSkeleton } from '@/components/listings/PropertyCardSkeleton
 export function MyListingsPage() {
   const { user } = useAuthStore()
   const { locale, t } = useLocale()
-  const { properties, loading, refetch } = useProperties()
+  const { properties, loading, refetch } = useProperties(undefined, { limit: 100 })
   const [vipModalOpen, setVipModalOpen] = useState(false)
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null)
   const [deletedIds, setDeletedIds] = useState<string[]>([])

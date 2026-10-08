@@ -66,13 +66,13 @@ export function BottomNav() {
       >
         <span
           className={cn(
-            'p-2.5 rounded-xl transition-all duration-200',
+            'p-2.5 rounded-xl transition-all duration-200 opacity-100',
             active
-              ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/40'
-              : 'text-zinc-400 hover:text-zinc-200'
+              ? 'bg-[#295255] text-white shadow-md shadow-[#295255]/25 opacity-100'
+              : 'text-[#577877] hover:bg-[#295255]/10 hover:text-[#295255] dark:text-zinc-400 dark:hover:text-zinc-200'
           )}
         >
-          <Icon className="h-5 w-5" />
+          <Icon className="h-5 w-5 opacity-100" />
         </span>
       </Link>
     )
@@ -81,7 +81,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Bottom navigation"
-      className="fixed bottom-3 inset-x-4 mx-auto max-w-md h-14 rounded-2xl bg-zinc-950/90 dark:bg-zinc-900/90 backdrop-blur-lg border border-zinc-800 shadow-2xl flex items-center justify-around px-3 z-40 md:hidden"
+      className="fixed bottom-3 inset-x-4 mx-auto max-w-md h-14 rounded-2xl backdrop-blur-2xl bg-white/60 dark:bg-[#162623]/65 border border-white/40 dark:border-white/10 shadow-[0_8px_32px_0_rgba(41,82,85,0.12)] flex items-center justify-around px-3 z-40 md:hidden"
     >
       {tabs.map(renderTab)}
     </nav>

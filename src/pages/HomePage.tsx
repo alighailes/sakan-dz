@@ -48,8 +48,8 @@ export function HomePage() {
       <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">Annonces en vedette</h2>
-            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Les biens les plus populaires</p>
+            <h2 className="text-2xl font-bold text-[#162623] dark:text-white">Annonces en vedette</h2>
+            <p className="mt-1 text-sm text-[#577877] dark:text-zinc-400">Les biens les plus populaires</p>
           </div>
           <Link to="/listings">
             <Button variant="ghost" className="gap-1">
@@ -89,24 +89,24 @@ export function HomePage() {
       </section>
 
       {/* 4. Popular Wilayas */}
-      <section className="border-y border-zinc-200/60 bg-zinc-50/50 py-12 dark:border-zinc-800/60 dark:bg-zinc-900/40">
+      <section className="border-y border-[#577877]/15 bg-[#F0F5F7]/60 py-12 dark:border-zinc-800/60 dark:bg-zinc-900/40">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">Wilayas populaires</h2>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Explorez les villes les plus actives</p>
+          <h2 className="text-2xl font-bold text-[#162623] dark:text-white">Wilayas populaires</h2>
+          <p className="mt-1 text-sm text-[#577877] dark:text-zinc-400">Explorez les villes les plus actives</p>
           <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
             {popularWilayas.map((wilaya) => (
               <Link
                 key={wilaya.id}
                 to={`/listings?wilaya=${wilaya.id}`}
-                className="group rounded-2xl border border-zinc-200 bg-white p-4 text-center shadow-soft transition-all hover:shadow-soft-lg hover:-translate-y-0.5 dark:border-zinc-800 dark:bg-zinc-900"
+                className="group rounded-2xl border border-[#577877]/15 bg-white p-4 text-center shadow-soft transition-all hover:shadow-soft-lg hover:-translate-y-0.5 dark:border-zinc-800 dark:bg-zinc-900"
               >
-                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary-50 transition-colors group-hover:bg-primary-100 dark:bg-primary-900/30 dark:group-hover:bg-primary-900/50">
-                  <MapPin className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#295255]/10 transition-colors group-hover:bg-[#295255]/15 dark:bg-primary-900/30 dark:group-hover:bg-primary-900/50">
+                  <MapPin className="h-5 w-5 text-[#295255] dark:text-primary-400" />
                 </div>
-                <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">
+                <h3 className="text-sm font-semibold text-[#162623] dark:text-white">
                   {locale === 'ar' ? wilaya.nameAr : wilaya.name}
                 </h3>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">{wilaya.id}</p>
+                <p className="text-xs text-[#577877] dark:text-zinc-400">{wilaya.id}</p>
               </Link>
             ))}
           </div>
@@ -114,7 +114,7 @@ export function HomePage() {
       </section>
 
       {/* 5. Buyer Guides & Quick Services */}
-      <section className="border-y border-zinc-200/60 bg-zinc-50/50 py-12 dark:border-zinc-800/60 dark:bg-zinc-900/40">
+      <section className="border-y border-[#577877]/15 bg-[#F0F5F7]/60 py-12 dark:border-zinc-800/60 dark:bg-zinc-900/40">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <HomeGuidesAndServices />
         </div>
@@ -122,32 +122,32 @@ export function HomePage() {
 
       {/* 6. Features */}
       <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <h2 className="text-center text-2xl font-bold text-zinc-900 dark:text-white">Pourquoi Sakan DZ ?</h2>
+        <h2 className="text-center text-2xl font-bold text-[#162623] dark:text-white">Pourquoi Sakan DZ ?</h2>
         <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-3">
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-50 dark:bg-primary-900/30">
-              <Building2 className="h-7 w-7 text-primary-600 dark:text-primary-400" />
+          <div className="rounded-2xl border border-[#577877]/15 bg-white p-6 text-center shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#295255]/10 dark:bg-primary-900/30">
+              <Building2 className="h-7 w-7 text-[#295255] dark:text-primary-400" />
             </div>
-            <h3 className="text-lg font-semibold text-zinc-900 dark:text-white">58 Wilayas couvertes</h3>
-            <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+            <h3 className="text-lg font-semibold text-[#162623] dark:text-white">58 Wilayas couvertes</h3>
+            <p className="mt-2 text-sm text-[#577877] dark:text-zinc-400">
               Trouvez des biens partout en Algerie, de Adrar a Tindouf.
             </p>
           </div>
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 dark:bg-emerald-900/30">
-              <Shield className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+          <div className="rounded-2xl border border-[#577877]/15 bg-white p-6 text-center shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#295255]/10 dark:bg-emerald-900/30">
+              <Shield className="h-7 w-7 text-[#295255] dark:text-emerald-400" />
             </div>
-            <h3 className="text-lg font-semibold text-zinc-900 dark:text-white">Annonces verifiees</h3>
-            <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+            <h3 className="text-lg font-semibold text-[#162623] dark:text-white">Annonces verifiees</h3>
+            <p className="mt-2 text-sm text-[#577877] dark:text-zinc-400">
               Chaque annonce est verifiee pour votre securite et tranquillite d'esprit.
             </p>
           </div>
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-50 dark:bg-accent-900/30">
-              <Home className="h-7 w-7 text-accent-600 dark:text-accent-400" />
+          <div className="rounded-2xl border border-[#577877]/15 bg-white p-6 text-center shadow-soft dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#295255]/10 dark:bg-accent-900/30">
+              <Home className="h-7 w-7 text-[#295255] dark:text-accent-400" />
             </div>
-            <h3 className="text-lg font-semibold text-zinc-900 dark:text-white">Types varies</h3>
-            <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+            <h3 className="text-lg font-semibold text-[#162623] dark:text-white">Types varies</h3>
+            <p className="mt-2 text-sm text-[#577877] dark:text-zinc-400">
               Appartements, villas, terrains, locaux commerciaux et colocation.
             </p>
           </div>
@@ -155,18 +155,18 @@ export function HomePage() {
       </section>
 
       {/* 7. CTA */}
-      <section className="bg-gradient-to-r from-emerald-600 to-teal-800 py-12">
-        <div className="mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
+      <section className="bg-[#295255] py-12 dark:bg-[#162623]">
+        <div className="mx-auto max-w-7xl rounded-3xl px-4 text-center sm:px-6 lg:px-8">
           <h2 className="text-2xl font-bold text-white">
             {locale === 'ar' ? 'هل لديك عقار تريد بيعه أو تأجيره؟' : 'Vous avez un bien à louer ou vendre ?'}
           </h2>
-          <p className="mt-2 text-emerald-100/80">
+          <p className="mt-2 text-white/70">
             {locale === 'ar'
               ? 'انشر إعلانك مجاناً وبكل سهولة في دقائق معدودة ليصل إلى آلاف المهتمين.'
               : 'Publiez votre annonce gratuitement en quelques minutes.'}
           </p>
           <Link to="/publish" className="mt-6 inline-block">
-            <Button size="lg" variant="accent" className="gap-2">
+            <Button size="lg" className="gap-2 bg-white text-[#295255] hover:bg-[#F0F5F7]">
               {locale === 'ar' ? 'أضف إعلاناً' : 'Déposer une annonce'}
               <ArrowRight className="h-4 w-4" />
             </Button>

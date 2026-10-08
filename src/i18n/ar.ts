@@ -361,6 +361,7 @@ const ar: TranslationKeys = {
     close: 'إغلاق',
     back: 'رجوع',
     seeAll: 'عرض الكل',
+    loadMore: 'عرض المزيد',
     currency: 'دج',
     centimes: 'سنتيم',
   },

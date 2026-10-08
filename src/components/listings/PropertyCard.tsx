@@ -28,7 +28,7 @@ export function PropertyCard({ property }: PropertyCardProps) {
   const { mode } = useCurrencyStore()
   const fav = isFavorite(property.id)
   const wilaya = WILAYAS.find((w) => w.id === property.wilayaId)
-  const { properties: allProperties } = useProperties()
+  const { properties: allProperties } = useProperties(undefined, { limit: 60 })
 
   const priceLabel = property.operationType === 'vacation' && property.pricePerNight
     ? formatPriceWithMode(property.pricePerNight, property.currency, mode, locale)
@@ -57,14 +57,15 @@ export function PropertyCard({ property }: PropertyCardProps) {
   }
 
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-soft transition-all duration-300 hover:shadow-soft-lg hover:-translate-y-1 dark:border-zinc-800/80 dark:bg-zinc-900">
-      {/* Image */}
-      <div className="relative aspect-[4/3] overflow-hidden">
+    <div className="group relative overflow-hidden rounded-2xl backdrop-blur-lg bg-white/50 dark:bg-[#162623]/45 border border-white/50 dark:border-white/5 shadow-sm hover:shadow-xl hover:border-[#295255]/30 transition-all duration-300 hover:-translate-y-1">
+      {/* Image — fixed aspect box + placeholder bg prevent CLS while lazy-loading */}
+      <div className="relative aspect-[4/3] overflow-hidden bg-[#F0F5F7] dark:bg-zinc-800">
         <img
           src={property.images[0] || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800'}
           alt={property.title}
-          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+          className="h-full w-full bg-[#F0F5F7] object-cover transition-transform duration-500 group-hover:scale-105 dark:bg-zinc-800"
           loading="lazy"
+          decoding="async"
         />
 
         {/* Gradient overlay */}
@@ -74,7 +75,7 @@ export function PropertyCard({ property }: PropertyCardProps) {
         <div className="absolute left-3 top-3 flex flex-col gap-1.5">
           {property.isFeatured && <VipBadge />}
           {property.isVerified && <VerifiedBadge />}
-          <Badge variant="glass" className="text-[10px]">
+          <Badge variant="glass" className="text-[10px] backdrop-blur-md bg-[#295255]/15 text-[#295255] dark:text-[#F0F5F7] border border-[#295255]/20 font-semibold opacity-100">
             {getOperationLabelFr(property.operationType)}
           </Badge>
         </div>
@@ -97,12 +98,12 @@ export function PropertyCard({ property }: PropertyCardProps) {
 
         {/* Price pill - bottom of image */}
         <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between">
-          <div className="glass rounded-xl px-3 py-1.5">
-            <p className="text-sm font-bold text-zinc-900 dark:text-white">
+          <div className="rounded-xl px-3 py-1.5 backdrop-blur-md bg-[#295255]/15 text-[#295255] dark:text-[#F0F5F7] border border-[#295255]/20 font-semibold opacity-100">
+            <p className="text-sm font-bold text-[#295255] dark:text-[#F0F5F7] opacity-100">
               {priceLabel}
             </p>
             {mode === 'dzd' && (
-              <p className="text-[10px] text-zinc-500 dark:text-zinc-400">{altPriceLabel}</p>
+              <p className="text-[10px] opacity-80">{altPriceLabel}</p>
             )}
           </div>
           <div className="flex items-center gap-1 rounded-lg bg-black/30 px-2 py-1 text-[10px] text-white backdrop-blur-sm">
@@ -123,7 +124,7 @@ export function PropertyCard({ property }: PropertyCardProps) {
       <div className="p-4">
         {/* Title */}
         <Link to={`/property/${property.id}`} className="block">
-          <h3 className="line-clamp-1 text-sm font-semibold text-zinc-900 transition-colors group-hover:text-primary-600 dark:text-zinc-100 dark:group-hover:text-primary-400">
+          <h3 className="line-clamp-1 text-sm font-semibold text-zinc-900 transition-colors group-hover:text-primary-600 dark:text-zinc-100 dark:group-hover:text-primary-400 opacity-100">
             {property.title}
           </h3>
         </Link>

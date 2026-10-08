@@ -11,7 +11,7 @@ import { jsPDF } from 'jspdf'
 export function ContractGeneratorPage() {
   const [searchParams] = useSearchParams()
   const propertyId = searchParams.get('propertyId')
-  const { properties } = useProperties()
+  const { properties } = useProperties(undefined, { limit: 100 })
   const { t } = useLocale()
   const property = properties.find((p) => p.id === propertyId)
 

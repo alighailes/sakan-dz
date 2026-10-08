@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Property, SearchFilters } from '@/types'
-import { fetchProperties, invalidatePropertiesCache } from '@/services/api'
+import { fetchProperties, invalidatePropertiesCache, type FetchPageOptions } from '@/services/api'
 
 interface UsePropertiesReturn {
   properties: Property[]
@@ -13,13 +13,14 @@ interface UsePropertiesReturn {
  * Hook to fetch live properties from Supabase with optional filters.
  * Returns an empty array when the table is empty or on error (no mock data).
  */
-export function useProperties(filters?: SearchFilters): UsePropertiesReturn {
+export function useProperties(filters?: SearchFilters, options?: FetchPageOptions): UsePropertiesReturn {
   const [properties, setProperties] = useState<Property[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [nonce, setNonce] = useState(0)
 
   const filtersKey = JSON.stringify(filters ?? {})
+  const optionsKey = JSON.stringify(options ?? {})
 
   useEffect(() => {
     let cancelled = false
@@ -30,7 +31,11 @@ export function useProperties(filters?: SearchFilters): UsePropertiesReturn {
 
       try {
         const parsed: SearchFilters = filtersKey ? (JSON.parse(filtersKey) as SearchFilters) : {}
-        const data = await fetchProperties(Object.keys(parsed).length > 0 ? parsed : undefined)
+        const parsedOptions: FetchPageOptions = optionsKey ? (JSON.parse(optionsKey) as FetchPageOptions) : {}
+        const data = await fetchProperties(
+          Object.keys(parsed).length > 0 ? parsed : undefined,
+          Object.keys(parsedOptions).length > 0 ? parsedOptions : undefined
+        )
         if (!cancelled) {
           setProperties(data)
         }
@@ -52,7 +57,7 @@ export function useProperties(filters?: SearchFilters): UsePropertiesReturn {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtersKey, nonce])
+  }, [filtersKey, optionsKey, nonce])
 
   const refetch = useCallback(() => {
     // Bypass the shared query cache so an explicit refresh always

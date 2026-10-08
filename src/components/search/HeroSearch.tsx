@@ -119,30 +119,30 @@ export function HeroSearch() {
   }
 
   return (
-    <section className="relative flex min-h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-gradient-to-br from-primary-900 via-primary-800 to-primary-950">
+    <section className="relative flex min-h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-gradient-to-b from-[#F0F5F7] to-white dark:from-zinc-950 dark:to-zinc-900">
       {/* Background pattern */}
-      <div className="absolute inset-0 opacity-[0.07]">
+      <div className="absolute inset-0 opacity-[0.06]">
         <div className="absolute inset-0" style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23295255' fill-opacity='0.5'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
         }} />
       </div>
 
       {/* Ambient glow */}
-      <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-primary-500/20 blur-3xl" />
-      <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-accent-500/10 blur-3xl" />
+      <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-[#295255]/10 blur-3xl" />
+      <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-[#577877]/10 blur-3xl" />
 
       <div className="relative mx-auto flex w-full max-w-4xl flex-1 flex-col items-center justify-center px-4 pt-8 pb-28 sm:px-6 sm:py-10 lg:px-8 lg:py-12">
         {/* Headline */}
-        <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl lg:text-5xl">
+        <h1 className="text-3xl font-extrabold tracking-tight text-[#162623] dark:text-white sm:text-4xl lg:text-5xl">
           {t.hero.title}
         </h1>
-        <p className="mx-auto mt-4 max-w-2xl text-lg text-primary-100/80 sm:text-xl">
+        <p className="mx-auto mt-4 max-w-2xl text-lg text-[#577877] dark:text-zinc-400 sm:text-xl">
           {t.hero.subtitle}
         </p>
 
         {/* Floating Glass Search Island — bounded centered card */}
         <form onSubmit={handleSearch} className="mx-auto mt-10 w-full min-w-0 max-w-xl sm:px-0 md:max-w-2xl">
-          <div className="glass-strong box-border w-full min-w-0 overflow-hidden rounded-2xl p-2 shadow-soft-xl">
+          <div className="glass-strong box-border w-full min-w-0 overflow-hidden rounded-2xl border border-[#577877]/15 bg-white/90 p-2 shadow-soft-xl dark:bg-zinc-900/90">
             {/* Operation Toggle Pills — horizontally scrollable on narrow screens */}
             <div className="flex w-full min-w-0 items-center gap-2 overflow-x-auto no-scrollbar scrollbar-hide px-2 pb-2">
               <button
@@ -151,8 +151,8 @@ export function HeroSearch() {
                 className={cn(
                   'shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-all duration-200',
                   !operation
-                    ? 'bg-primary-600 text-white shadow-glow'
-                    : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
+                    ? 'bg-[#295255] text-white shadow-md shadow-[#295255]/25'
+                    : 'text-[#577877] hover:bg-[#295255]/10 hover:text-[#295255] dark:text-zinc-400 dark:hover:bg-zinc-800'
                 )}
               >
                 {t.filters.all}
@@ -167,8 +167,8 @@ export function HeroSearch() {
                     className={cn(
                       'flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-all duration-200',
                       operation === op.value
-                        ? 'bg-primary-600 text-white shadow-glow'
-                        : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
+                        ? 'bg-[#295255] text-white shadow-md shadow-[#295255]/25'
+                        : 'text-[#577877] hover:bg-[#295255]/10 hover:text-[#295255] dark:text-zinc-400 dark:hover:bg-zinc-800'
                     )}
                   >
                     <Icon className="h-3.5 w-3.5" />
@@ -230,7 +230,7 @@ export function HeroSearch() {
 
         {/* Legal Status Filter */}
         <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-          <span className="text-xs text-primary-100/60">
+          <span className="text-xs text-[#577877] dark:text-zinc-400">
             {locale === 'ar' ? 'الوثائق القانونية' : 'Statut juridique'}:
           </span>
           <select
@@ -239,7 +239,7 @@ export function HeroSearch() {
               const val = (e.target.value || undefined) as LegalStatus | undefined
               setFilters({ legalStatus: val })
             }}
-            className="h-9 rounded-full border border-white/20 bg-white/10 px-3 text-sm text-white backdrop-blur-sm transition-all hover:border-white/40 focus:border-white/60 focus:outline-none [&>option]:text-zinc-900"
+            className="h-9 rounded-full border border-[#577877]/25 bg-white px-3 text-sm text-[#162623] shadow-sm transition-all hover:border-[#295255]/50 focus:border-[#295255] focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 [&>option]:text-zinc-900"
           >
             <option value="">{t.filters.allLegal}</option>
             {LEGAL_STATUS.map((ls) => (
@@ -256,7 +256,7 @@ export function HeroSearch() {
             <button
               key={`${chip.wilaya}-${chip.operation}`}
               onClick={() => handleQuickFilter(chip.wilaya, chip.operation)}
-              className="shrink-0 whitespace-nowrap rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-white/90 backdrop-blur-sm transition-all duration-200 hover:border-white/40 hover:bg-white/20 hover:text-white"
+              className="shrink-0 whitespace-nowrap rounded-full border border-[#577877]/25 bg-white px-4 py-2 text-sm text-[#295255] shadow-sm transition-all duration-200 hover:border-[#295255]/40 hover:bg-[#295255]/10 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
             >
               {locale === 'ar' ? chip.labelAr : chip.labelFr}
             </button>
@@ -264,25 +264,25 @@ export function HeroSearch() {
         </div>
 
         {/* Quick Stats */}
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-6 text-primary-100/70">
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-6 text-[#577877] dark:text-zinc-400">
           <div className="flex items-center gap-2">
-            <span className="text-2xl font-bold text-white">58</span>
+            <span className="text-2xl font-bold text-[#162623] dark:text-white">58</span>
             <span className="text-sm">Wilayas</span>
           </div>
-          <div className="h-4 w-px bg-primary-400/30" />
+          <div className="h-4 w-px bg-[#577877]/20" />
           <div className="flex items-center gap-2">
-            <span className="text-2xl font-bold text-white">1000+</span>
+            <span className="text-2xl font-bold text-[#162623] dark:text-white">1000+</span>
             <span className="text-sm">Annonces</span>
           </div>
-          <div className="h-4 w-px bg-primary-400/30" />
+          <div className="h-4 w-px bg-[#577877]/20" />
           <div className="flex items-center gap-2">
-            <span className="text-2xl font-bold text-white">500+</span>
+            <span className="text-2xl font-bold text-[#162623] dark:text-white">500+</span>
             <span className="text-sm">Utilisateurs</span>
           </div>
         </div>
 
         {/* Trust badge */}
-        <div className="mt-8 flex items-center justify-center gap-2 text-sm text-primary-100/50">
+        <div className="mt-8 flex items-center justify-center gap-2 text-sm text-[#577877]/80 dark:text-zinc-500">
           <TrendingUp className="h-4 w-4" />
           <span>Plateforme N°1 de l'immobilier en Algérie</span>
         </div>

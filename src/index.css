@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --brand-primary: #295255;
+  --brand-hover: #203f42;
+  --brand-surface: #F0F5F7;
+  --brand-dark: #162623;
+  --brand-muted: #577877;
+}
+
 @layer base {
   * {
     @apply border-gray-200 dark:border-zinc-800;
@@ -20,13 +28,38 @@
 }
 
 @layer components {
-  /* Glassmorphism surfaces */
+  /* Glassmorphism surfaces — legacy (kept for compat) */
   .glass {
     @apply bg-white/80 backdrop-blur-md border border-white/20 dark:bg-zinc-900/80 dark:border-zinc-800/60;
   }
 
   .glass-strong {
     @apply bg-white/90 backdrop-blur-lg border border-white/30 dark:bg-zinc-900/90 dark:border-zinc-700/60;
+  }
+
+  /* Luxury Nordic Glass — reusable utilities aligned with #295255 / #F0F5F7 */
+  .glass-nordic {
+    @apply backdrop-blur-xl bg-white/75 border border-white/60 shadow-[0_8px_32px_0_rgba(41,82,85,0.08)] dark:backdrop-blur-xl dark:bg-[#162623]/80 dark:border-white/10 dark:shadow-[0_8px_32px_0_rgba(0,0,0,0.37)];
+  }
+
+  .glass-nordic-strong {
+    @apply backdrop-blur-2xl bg-white/85 border border-white/60 shadow-[0_8px_32px_0_rgba(41,82,85,0.12)] dark:backdrop-blur-2xl dark:bg-[#162623]/90 dark:border-white/10 dark:shadow-[0_8px_32px_0_rgba(0,0,0,0.37)];
+  }
+
+  .glass-nordic-nav {
+    @apply backdrop-blur-2xl bg-[#F0F5F7]/55 border-b border-white/50 dark:backdrop-blur-2xl dark:bg-[#162623]/60 dark:border-white/10;
+  }
+
+  .glass-nordic-dropdown {
+    @apply backdrop-blur-2xl bg-white/85 border border-white/60 shadow-[0_8px_32px_0_rgba(41,82,85,0.12)] dark:backdrop-blur-2xl dark:bg-[#162623]/90 dark:border-white/10 dark:shadow-[0_8px_32px_0_rgba(0,0,0,0.37)];
+  }
+
+  .glass-nordic-card {
+    @apply backdrop-blur-lg bg-white/50 border border-white/50 shadow-sm rounded-2xl dark:backdrop-blur-lg dark:bg-[#162623]/45 dark:border-white/5;
+  }
+
+  .glass-nordic-pill {
+    @apply backdrop-blur-md bg-[#295255]/15 text-[#295255] border border-[#295255]/20 font-semibold dark:backdrop-blur-md dark:text-[#F0F5F7];
   }
 
   /* Shimmer skeleton */

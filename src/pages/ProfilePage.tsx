@@ -69,7 +69,7 @@ export function ProfilePage() {
   const navigate = useNavigate()
   const { user, profile, loading, updateProfile, updateRole, signOut, activeRole } = useAuthStore()
   const { favorites } = useFavoritesStore()
-  const { properties } = useProperties()
+  const { properties } = useProperties(undefined, { limit: 100 })
 
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')

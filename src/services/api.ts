@@ -111,13 +111,71 @@ function mapRowToProperty(row: Record<string, unknown>): Property {
   }
 }
 
-function buildPropertyQuery(filters?: SearchFilters) {
+/* ------------------------------------------------------------------ */
+/* Feed payload — card columns only (no select('*')).                   */
+/* Covers card render + client-side filters + map markers + benchmark    */
+/* comparables. Deliberately excludes the heavy PostGIS `location`       */
+/* geography, `*_ar` texts, and detail-only modules (vacation/agency     */
+/* extras). Detail pages fetch the full row via fetchPropertyById.       */
+/* ------------------------------------------------------------------ */
+
+const CARD_COLUMNS = [
+  'id',
+  'title',
+  'operation_type',
+  'property_type',
+  'price',
+  'price_per_night',
+  'currency',
+  'wilaya_id',
+  'commune',
+  'daira',
+  'address',
+  'description',
+  'latitude',
+  'longitude',
+  'bedrooms',
+  'bathrooms',
+  'area',
+  'legal_status',
+  'images',
+  'owner_id',
+  'owner_name',
+  'owner_phone',
+  'is_featured',
+  'is_available',
+  'is_verified',
+  'views_count',
+  'created_at',
+  'water_availability',
+  'gas_type',
+  'has_elevator',
+  'floor_number',
+  'floor',
+  'wifi_included',
+  'colocation_gender',
+  'student_friendly',
+  'agency_id',
+  'agency_name',
+].join(',')
+
+/** Default feed page size for listings/home grids (load-more paging). */
+export const FEED_PAGE_SIZE = 12
+
+export interface FetchPageOptions {
+  limit?: number
+  offset?: number
+}
+
+function buildPropertyQuery(filters?: SearchFilters, options?: FetchPageOptions) {
+  const limit = options?.limit ?? FEED_PAGE_SIZE
+  const offset = options?.offset ?? 0
   let query = supabase
     .from('properties')
-    .select('*')
+    .select(CARD_COLUMNS)
     .eq('is_published', true)
     .order('created_at', { ascending: false })
-    .limit(100)
+    .range(offset, offset + limit - 1)
 
   if (!filters) return query
 
@@ -148,9 +206,9 @@ function buildPropertyQuery(filters?: SearchFilters) {
  * page-transition remounts reuse fresh results instead of refetching.
  * Call `invalidatePropertiesCache()` after mutations (publish/delete).
  */
-export async function fetchProperties(filters?: SearchFilters): Promise<Property[]> {
-  const key = `props:${JSON.stringify(filters ?? {})}`
-  return dedupedQuery(key, () => fetchPropertiesUncached(filters))
+export async function fetchProperties(filters?: SearchFilters, options?: FetchPageOptions): Promise<Property[]> {
+  const key = `props:${JSON.stringify(filters ?? {})}:${JSON.stringify(options ?? {})}`
+  return dedupedQuery(key, () => fetchPropertiesUncached(filters, options))
 }
 
 /** Drop cached listings so the next read hits the network. */
@@ -159,8 +217,8 @@ export function invalidatePropertiesCache(): void {
   invalidateQueries('featured:')
 }
 
-async function fetchPropertiesUncached(filters?: SearchFilters): Promise<Property[]> {
-  const { data, error } = await buildPropertyQuery(filters)
+async function fetchPropertiesUncached(filters?: SearchFilters, options?: FetchPageOptions): Promise<Property[]> {
+  const { data, error } = await buildPropertyQuery(filters, options)
 
   if (error) {
     console.error('Error fetching properties:', error)
@@ -169,7 +227,7 @@ async function fetchPropertiesUncached(filters?: SearchFilters): Promise<Propert
 
   if (!data || data.length === 0) return []
 
-  let properties = (data as Record<string, unknown>[]).map(mapRowToProperty)
+  let properties = (data as unknown as Record<string, unknown>[]).map(mapRowToProperty)
 
   // Client-side filters (support both `operation`/`operation_type`,
   // `wilaya`/`wilaya_id`, `surface`/`area`, `rooms`/`bedrooms` variants)
@@ -253,7 +311,7 @@ export async function fetchFeaturedProperties(limit = 4): Promise<Property[]> {
 async function fetchFeaturedUncached(limit: number): Promise<Property[]> {
   const { data, error } = await supabase
     .from('properties')
-    .select('*')
+    .select(CARD_COLUMNS)
     .eq('is_published', true)
     .eq('is_featured', true)
     .order('created_at', { ascending: false })
@@ -265,7 +323,7 @@ async function fetchFeaturedUncached(limit: number): Promise<Property[]> {
   }
 
   if (!data || data.length === 0) return []
-  return (data as Record<string, unknown>[]).map(mapRowToProperty)
+  return (data as unknown as Record<string, unknown>[]).map(mapRowToProperty)
 }
 
 /* ------------------------------------------------------------------ */
@@ -363,7 +421,7 @@ export async function fetchFavoriteProperties(userId: string): Promise<Property[
   const ids = await getFavoriteIds(userId)
   if (ids.length === 0) return []
 
-  const { data, error } = await supabase.from('properties').select('*').in('id', ids)
+  const { data, error } = await supabase.from('properties').select(CARD_COLUMNS).in('id', ids)
 
   if (error) {
     console.error('Error fetching favorite properties:', error)
@@ -371,7 +429,7 @@ export async function fetchFavoriteProperties(userId: string): Promise<Property[
   }
 
   if (!data || data.length === 0) return []
-  return (data as Record<string, unknown>[]).map(mapRowToProperty)
+  return (data as unknown as Record<string, unknown>[]).map(mapRowToProperty)
 }
 
 /* ------------------------------------------------------------------ */

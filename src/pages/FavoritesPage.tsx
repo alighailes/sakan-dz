@@ -9,7 +9,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useLocale } from '@/i18n'
 
 export function FavoritesPage() {
-  const { properties, loading } = useProperties()
+  const { properties, loading } = useProperties(undefined, { limit: 100 })
   const { favorites, loadUserFavorites } = useFavoritesStore()
   const { user } = useAuthStore()
   const { t } = useLocale()

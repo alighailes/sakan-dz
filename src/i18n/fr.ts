@@ -367,6 +367,7 @@ const fr = {
     close: 'Fermer',
     back: 'Retour',
     seeAll: 'Voir tout',
+    loadMore: 'Charger plus',
     currency: 'DZD',
     centimes: 'Centimes',
   },

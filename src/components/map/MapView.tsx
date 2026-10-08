@@ -114,7 +114,7 @@ function DrawingLayer({
 
 export function MapView() {
   const { filters } = useSearchStore()
-  const { properties, loading } = useProperties(filters)
+  const { properties, loading } = useProperties(filters, { limit: 200 })
   const { locale, t } = useLocale()
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null)
   const mapRef = useRef<L.Map | null>(null)

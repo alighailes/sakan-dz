@@ -1,19 +1,16 @@
-import { useEffect } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Layout } from '@/components/layout/Layout'
 import { ChatWidget } from '@/components/chat/ChatWidget'
 import { RoleOnboardingModal } from '@/components/onboarding/RoleOnboardingModal'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { InstallBanner } from '@/components/InstallBanner'
+import { PageSkeleton } from '@/components/ui/page-skeleton'
 import { HomePage } from '@/pages/HomePage'
 import { ListingsPage } from '@/pages/ListingsPage'
-import { MapPage } from '@/pages/MapPage'
 import { FavoritesPage } from '@/pages/FavoritesPage'
 import { MessagesPage } from '@/pages/MessagesPage'
-import { PublishPage } from '@/pages/PublishPage'
-import { PropertyDetailPage } from '@/pages/PropertyDetailPage'
 import { AuthPage } from '@/pages/Auth'
-import { ProfilePage } from '@/pages/ProfilePage'
 import { ResetPasswordPage } from '@/pages/ResetPasswordPage'
 import { MyListingsPage } from '@/pages/MyListingsPage'
 import { SavedSearchesPage } from '@/pages/SavedSearchesPage'
@@ -32,6 +29,16 @@ import { TermsPage } from '@/pages/TermsPage'
 import { ValuationPage } from '@/pages/ValuationPage'
 import { useAuthStore } from '@/stores/authStore'
 
+// Heavy routes are code-split so the initial bundle stays lean.
+// MapPage pulls in Leaflet (~150KB); Publish/Profile/Detail are
+// rarely the landing page.
+const MapPage = lazy(() => import('@/pages/MapPage').then((m) => ({ default: m.MapPage })))
+const PublishPage = lazy(() => import('@/pages/PublishPage').then((m) => ({ default: m.PublishPage })))
+const ProfilePage = lazy(() => import('@/pages/ProfilePage').then((m) => ({ default: m.ProfilePage })))
+const PropertyDetailPage = lazy(() =>
+  import('@/pages/PropertyDetailPage').then((m) => ({ default: m.PropertyDetailPage }))
+)
+
 export default function App() {
   const initialize = useAuthStore((state) => state.initialize)
 
@@ -40,7 +47,8 @@ export default function App() {
   }, [initialize])
 
   return (
-<BrowserRouter basename={import.meta.env.BASE_URL} future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>      <Routes>
+<BrowserRouter basename={import.meta.env.BASE_URL} future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>      <Suspense fallback={<PageSkeleton />}>
+      <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/listings" element={<ListingsPage />} />
@@ -90,6 +98,7 @@ export default function App() {
           <Route path="/property/:id" element={<PropertyDetailPage />} />
         </Route>
       </Routes>
+      </Suspense>
       <ChatWidget />
       <RoleOnboardingModal />
       <InstallBanner />

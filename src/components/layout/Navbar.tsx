@@ -70,7 +70,7 @@ export function Navbar() {
   )
 
   return (
-    <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/80 backdrop-blur-lg dark:border-zinc-800 dark:bg-zinc-900/80">
+    <header className="sticky top-0 z-40 backdrop-blur-2xl bg-[#F0F5F7]/55 dark:bg-[#162623]/60 dark:backdrop-blur-2xl border-b border-white/50 dark:border-white/10">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2">
@@ -80,8 +80,8 @@ export function Navbar() {
               <path d="M10 14v8h12v-8" stroke="white" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
-          <span className="text-xl font-bold text-zinc-900 dark:text-white">
-            Sakan <span className="text-primary-600 dark:text-primary-400">DZ</span>
+          <span className="text-xl font-bold text-zinc-900 dark:text-white opacity-100">
+            Sakan <span className="text-primary-600 dark:text-primary-400 opacity-100">DZ</span>
           </span>
         </Link>
 
@@ -141,7 +141,7 @@ export function Navbar() {
               </button>
 
               {userMenuOpen && (
-                <div className="glass-strong absolute end-0 top-full mt-2 w-56 rounded-xl py-1 shadow-soft-xl animate-fade-in">
+                <div className="glass-nordic-dropdown absolute end-0 top-full mt-2 w-56 rounded-xl py-1 animate-fade-in">
                   {/* User Info */}
                   <div className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-700">
                     <p className="flex items-center gap-2 text-sm font-medium text-zinc-900 dark:text-white">
@@ -255,7 +255,7 @@ export function Navbar() {
 
       {/* Mobile Nav */}
       {mobileOpen && (
-        <div className="border-t border-zinc-200 bg-white px-4 py-3 md:hidden dark:border-zinc-800 dark:bg-zinc-900 animate-fade-in">
+        <div className="backdrop-blur-2xl bg-white/85 dark:bg-[#162623]/90 border-t border-white/60 dark:border-white/10 px-4 py-3 md:hidden animate-fade-in">
           <nav className="flex flex-col gap-1">
             {/* Account header — exclusive mobile home of the profile/avatar */}
             {user && (
