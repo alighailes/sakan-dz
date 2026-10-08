@@ -23,7 +23,7 @@ import { useFavoritesStore } from '@/stores/favoritesStore'
 import { useProperties } from '@/hooks/useProperties'
 import { WILAYAS } from '@/constants'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
-import { sanitizePhone, sanitizeText } from '@/lib/sanitize'
+import { sanitizeText } from '@/lib/sanitize'
 import {
   isPushSubscribed,
   isPushSupported,
@@ -108,9 +108,13 @@ export function ProfilePage() {
   useEffect(() => {
     let cancelled = false
     if (!isPushSupported()) return
-    isPushSubscribed().then((v) => {
-      if (!cancelled) setPushActive(v)
-    })
+    isPushSubscribed()
+      .then((v) => {
+        if (!cancelled) setPushActive(v)
+      })
+      .catch((err) => {
+        console.error('[ProfilePage] reading push subscription failed:', err)
+      })
     return () => {
       cancelled = true
     }
@@ -185,15 +189,25 @@ export function ProfilePage() {
       }
 
       const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().slice(0, 4)
-      const path = `${user.id}/${Date.now()}.${ext}`
-      const { error: uploadError } = await supabase.storage
+      const filePath = `${user.id}/${Date.now()}.${ext}`
+      const { data, error } = await supabase.storage
         .from('avatars')
-        .upload(path, file, { cacheControl: '3600', upsert: true })
-      if (uploadError) throw uploadError
+        .upload(filePath, file, { upsert: true })
+      if (error) {
+        console.error('[ProfilePage] avatar upload failed:', error.message, error)
+        throw error
+      }
+      if (!data?.path) {
+        console.error('[ProfilePage] avatar upload returned no path:', data)
+      }
 
-      const { data } = supabase.storage.from('avatars').getPublicUrl(path)
-      const publicUrl = data.publicUrl
-      await updateProfile({ avatar_url: publicUrl })
+      const publicUrl = supabase.storage.from('avatars').getPublicUrl(filePath).data.publicUrl
+      try {
+        await updateProfile({ avatar_url: publicUrl })
+      } catch (profileError) {
+        console.error('[ProfilePage] saving avatar_url to profiles failed:', profileError)
+        throw profileError
+      }
       try {
         await supabase.auth.updateUser({ data: { avatar_url: publicUrl } })
       } catch {
@@ -201,7 +215,8 @@ export function ProfilePage() {
       }
       setAvatarUrl(publicUrl)
       showToast('success', locale === 'ar' ? 'تم تحديث الصورة' : 'Avatar updated')
-    } catch {
+    } catch (err) {
+      console.error('[ProfilePage] avatar upload failed:', err)
       setAvatarError(
         locale === 'ar' ? 'تعذّر رفع الصورة، حاول مجدداً' : 'Failed to upload image, try again'
       )
@@ -210,8 +225,22 @@ export function ProfilePage() {
     }
   }
 
-  const validatePhone = (value: string) =>
-    /^(0)(5|6|7)[0-9]{8}$/.test(value.replace(/\s/g, ''))
+  /** Strip spaces/dashes and normalize +213 / 00213 prefixes to local 0X form. */
+  const normalizePhoneInput = (value: string): string => {
+    let v = value.replace(/[\s.\-]/g, '').trim()
+    if (v.startsWith('+213')) v = `0${v.slice(4)}`
+    else if (v.startsWith('00213')) v = `0${v.slice(5)}`
+    else if (v.startsWith('213') && v.length >= 12) v = `0${v.slice(3)}`
+    return v
+  }
+
+  /** Empty is allowed (optional). Non-empty must match Algerian mobile format. */
+  const isPhoneValidOrEmpty = (value: string): boolean => {
+    const trimmed = value.trim()
+    if (!trimmed) return true
+    const cleaned = trimmed.replace(/[\s.\-]/g, '')
+    return /^(0|\+213|00213)?[567][0-9]{8}$/.test(cleaned)
+  }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -219,14 +248,14 @@ export function ProfilePage() {
     setFormError(null)
 
     const name = sanitizeText(fullName).trim()
-    const cleanPhone = sanitizePhone(phone)
+    const normalizedPhone = normalizePhoneInput(phone)
     const wilayaNum = Number(wilayaId)
 
     if (!name) {
       setFormError(locale === 'ar' ? 'المرجو إدخال الاسم الكامل' : 'Please enter your full name')
       return
     }
-    if (!validatePhone(cleanPhone)) {
+    if (!isPhoneValidOrEmpty(phone)) {
       setFormError(
         locale === 'ar' ? 'رقم الهاتف غير صالح (05/06/07...)' : 'Invalid phone number (05/06/07...)'
       )
@@ -241,7 +270,7 @@ export function ProfilePage() {
     try {
       await updateProfile({
         full_name: name,
-        phone_number: cleanPhone,
+        phone_number: normalizedPhone || profile?.phone_number || '',
         wilaya_id: wilayaNum,
         avatar_url: avatarUrl || undefined,
       })
@@ -283,15 +312,60 @@ export function ProfilePage() {
       if (pushActive) {
         await unsubscribeFromPush()
         setPushActive(false)
+        showToast('success', locale === 'ar' ? 'تم إيقاف الإشعارات' : 'Notifications disabled')
       } else {
-        const res = await subscribeToPush(user.id)
-        if (res.ok) setPushActive(true)
-        else
+        let res: Awaited<ReturnType<typeof subscribeToPush>>
+        try {
+          res = await subscribeToPush(user.id)
+        } catch (err) {
+          console.error('[ProfilePage] push subscribe threw:', err)
           showToast(
             'error',
-            locale === 'ar' ? 'تعذّر تفعيل الإشعارات' : 'Failed to enable notifications'
+            locale === 'ar'
+              ? 'تعذّر تفعيل الإشعارات، حاول مجدداً'
+              : 'Failed to enable notifications, try again'
           )
+          return
+        }
+        if (res.ok) {
+          setPushActive(true)
+          showToast('success', locale === 'ar' ? 'تم تفعيل الإشعارات' : 'Notifications enabled')
+        } else if (res.reason === 'denied') {
+          showToast(
+            'error',
+            locale === 'ar'
+              ? 'تم رفض إذن الإشعارات من المتصفح — فعّله من إعدادات الموقع ثم حاول مجدداً'
+              : 'Notification permission was denied — enable it in site settings and try again'
+          )
+        } else if (res.reason === 'unsupported' || res.reason === 'no-sw') {
+          showToast(
+            'error',
+            locale === 'ar'
+              ? 'متصفحك لا يدعم إشعارات الدفع'
+              : 'Your browser does not support push notifications'
+          )
+        } else if (res.reason === 'no-vapid') {
+          showToast(
+            'error',
+            locale === 'ar'
+              ? 'خدمة الإشعارات غير مهيأة حالياً'
+              : 'Push service is not configured right now'
+          )
+        } else {
+          showToast(
+            'error',
+            locale === 'ar'
+              ? 'تعذّر تفعيل الإشعارات، حاول مجدداً'
+              : 'Failed to enable notifications, try again'
+          )
+        }
       }
+    } catch (err) {
+      console.error('[ProfilePage] push toggle failed:', err)
+      showToast(
+        'error',
+        locale === 'ar' ? 'تعذّر تغيير حالة الإشعارات' : 'Failed to change notification state'
+      )
     } finally {
       setPushBusy(false)
     }
