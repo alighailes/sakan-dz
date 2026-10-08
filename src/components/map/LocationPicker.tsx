@@ -121,7 +121,7 @@ export function LocationPicker({
           setGpsLoading(false)
           setGpsError(
             locale === 'ar'
-              ? 'تم حظر الوصول إلى الموقع — فعّله من إعدادات المتصفح/الجهاز وتأكد أن GPS مفعّل ثم حاول مجددًا'
+              ? 'يرجى فك حظر الموقع لهذا الرابط من إعدادات المتصفح.'
               : 'Accès à la localisation bloqué — activez-le dans les réglages du navigateur/appareil et vérifiez que le GPS est activé, puis réessayez'
           )
           return
@@ -131,57 +131,72 @@ export function LocationPicker({
       // Permissions API unavailable — fall through to getCurrentPosition,
       // which will surface the real error via its error callback.
     }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude: lat, longitude: lng } = pos.coords
-        const fixed = normalizeLatLng(lat, lng)
-        const target = fixed ?? { lat, lng }
-        onChange(target.lat, target.lng)
-        // Pan the map directly to the detected location.
-        setGpsFix((prev) => ({ lat: target.lat, lng: target.lng, nonce: (prev?.nonce ?? 0) + 1 }))
-        if (!fixed) {
-          // Still place the pin, but warn when outside Algeria.
-          setGpsError(
-            locale === 'ar'
-              ? 'موقعك خارج الجزائر — حرّك الدبوس يدويًا'
-              : 'Position hors Algérie — ajustez le pin manuellement'
-          )
-        }
-        setGpsLoading(false)
-      },
-      (err) => {
-        setGpsLoading(false)
-        // err.code === 1 PERMISSION_DENIED: blocked in browser/OS settings.
-        if (typeof err.code === 'number' && err.code === 1) {
-          setGpsError(
-            locale === 'ar'
-              ? 'تم رفض إذن الموقع — فعّله من إعدادات المتصفح ثم حاول مجددًا'
-              : 'Permission de localisation refusée — activez-la dans le navigateur puis réessayez'
-          )
-        } else if (typeof err.code === 'number' && err.code === 2) {
-          // POSITION_UNAVAILABLE: device GPS off or no fix (indoors/no signal).
-          setGpsError(
-            locale === 'ar'
-              ? 'تعذّر تحديد الموقع — تأكد أن GPS الجهاز مفعّل وأنك في مكان مفتوح ثم حاول مجددًا'
-              : 'Position indisponible — vérifiez que le GPS de l’appareil est activé et réessayez en extérieur'
-          )
-        } else if (typeof err.code === 'number' && err.code === 3) {
-          // TIMEOUT: fix took longer than 10s — GPS off, weak signal, or blocked.
-          setGpsError(
-            locale === 'ar'
-              ? 'انتهت مهلة تحديد الموقع — تأكد أن GPS مفعّل وحاول مجددًا في مكان مفتوح'
-              : 'Délai de localisation dépassé — vérifiez que le GPS est activé et réessayez en extérieur'
-          )
-        } else {
-          setGpsError(
-            locale === 'ar'
-              ? 'تعذّر الحصول على الموقع — اسمح بالوصول أو حرّك الدبوس'
-              : 'Position indisponible — autorisez l’accès ou déplacez le pin'
-          )
-        }
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    )
+    const onGpsSuccess = (pos: GeolocationPosition) => {
+      const { latitude: lat, longitude: lng } = pos.coords
+      const fixed = normalizeLatLng(lat, lng)
+      const target = fixed ?? { lat, lng }
+      onChange(target.lat, target.lng)
+      // Pan the map directly to the detected location.
+      setGpsFix((prev) => ({ lat: target.lat, lng: target.lng, nonce: (prev?.nonce ?? 0) + 1 }))
+      if (!fixed) {
+        // Still place the pin, but warn when outside Algeria.
+        setGpsError(
+          locale === 'ar'
+            ? 'موقعك خارج الجزائر — حرّك الدبوس يدويًا'
+            : 'Position hors Algérie — ajustez le pin manuellement'
+        )
+      }
+      setGpsLoading(false)
+    }
+    const showGpsError = (code: number | undefined) => {
+      setGpsLoading(false)
+      // err.code === 1 PERMISSION_DENIED: blocked in browser/OS settings.
+      if (code === 1) {
+        setGpsError(
+          locale === 'ar'
+            ? 'يرجى فك حظر الموقع لهذا الرابط من إعدادات المتصفح.'
+            : 'Permission de localisation refusée — activez-la dans le navigateur puis réessayez'
+        )
+      } else if (code === 2) {
+        // POSITION_UNAVAILABLE: device GPS off or no fix (indoors/no signal).
+        setGpsError(
+          locale === 'ar'
+            ? 'تعذر تحديد الإحداثيات، يرجى تفعيل GPS من شريط الإشعارات.'
+            : 'Position indisponible — vérifiez que le GPS de l’appareil est activé et réessayez en extérieur'
+        )
+      } else if (code === 3) {
+        // TIMEOUT: fix took too long — GPS off, weak signal, or blocked.
+        setGpsError(
+          locale === 'ar'
+            ? 'استغرق تحديد الموقع وقتاً طويلاً، يرجى المحاولة مجدداً.'
+            : 'Délai de localisation dépassé — vérifiez que le GPS est activé et réessayez en extérieur'
+        )
+      } else {
+        setGpsError(
+          locale === 'ar'
+            ? 'تعذّر الحصول على الموقع — اسمح بالوصول أو حرّك الدبوس'
+            : 'Position indisponible — autorisez l’accès ou déplacez le pin'
+        )
+      }
+    }
+    const requestFix = (options: PositionOptions, isFallback: boolean) => {
+      navigator.geolocation.getCurrentPosition(
+        onGpsSuccess,
+        (err) => {
+          // First attempt failed: retry once with a fresh high-accuracy fix,
+          // unless permission itself was denied (retrying can't help there).
+          if (!isFallback && err.code !== 1) {
+            requestFix({ enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }, true)
+            return
+          }
+          showGpsError(typeof err.code === 'number' ? err.code : undefined)
+        },
+        options
+      )
+    }
+    // Fast low-accuracy attempt first (network fix / cached OK); the fallback
+    // retries with a fresh high-accuracy GPS fix when this one fails.
+    requestFix({ enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }, false)
   }
 
   return (
