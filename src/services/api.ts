@@ -157,7 +157,6 @@ const CARD_COLUMNS = [
   'owner_phone',
   'is_featured',
   'is_published',
-  'is_verified',
   'views_count',
   'created_at',
   'water_availability',
