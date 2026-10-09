@@ -86,7 +86,7 @@ function mapRowToProperty(row: Record<string, unknown>): Property {
     currency: toSafeCurrency(pick('currency')),
     pricePerNight: (pick('price_per_night', 'pricePerNight') as number | undefined) ?? undefined,
     wilayaId: resolveWilayaId(row),
-    daira: (pick('daira') as string | undefined) ?? undefined,
+    daira: ((pick('daira') as string | undefined) ?? (pick('commune') as string | undefined) ?? undefined),
     commune: (pick('commune') as string | undefined) ?? undefined,
     address: (pick('address') as string | undefined) ?? undefined,
     latitude,
@@ -143,7 +143,6 @@ const CARD_COLUMNS = [
   'currency',
   'wilaya_id',
   'commune',
-  'daira',
   'address',
   'description',
   'latitude',
@@ -157,7 +156,7 @@ const CARD_COLUMNS = [
   'owner_name',
   'owner_phone',
   'is_featured',
-  'is_available',
+  'is_published',
   'is_verified',
   'views_count',
   'created_at',
@@ -232,7 +231,8 @@ export function invalidatePropertiesCache(): void {
 }
 
 async function fetchPropertiesUncached(filters?: SearchFilters, options?: FetchPageOptions): Promise<Property[]> {
-  const { data, error } = await buildPropertyQuery(filters, options)
+  const { data, error, count } = await buildPropertyQuery(filters, options)
+  console.log('Fetched properties result:', { data, error, count });
 
   if (error) {
     console.error('Error fetching properties:', error)
@@ -323,13 +323,14 @@ export async function fetchFeaturedProperties(limit = 4): Promise<Property[]> {
 }
 
 async function fetchFeaturedUncached(limit: number): Promise<Property[]> {
-  const { data, error } = await supabase
+  const { data, error, count } = await supabase
     .from('properties')
     .select(CARD_COLUMNS)
     .eq('is_published', true)
     .eq('is_featured', true)
     .order('created_at', { ascending: false })
     .limit(limit)
+  console.log('Fetched properties result:', { data, error, count });
 
   if (error) {
     console.error('Error fetching featured properties:', error)
