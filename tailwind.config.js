@@ -8,23 +8,33 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Forest Emerald — primary brand
+        // Nordic Minimalist — green-slate brand
+        // Primary Action: #295255 (Hover: #203f42)
         primary: {
-          50: '#ecfdf5',
-          100: '#d1fae5',
-          200: '#a7f3d0',
-          300: '#6ee7b7',
-          400: '#34d399',
-          500: '#10b981',
-          600: '#059669',
-          700: '#047857',
-          800: '#065f46',
-          900: '#064e3b',
-          950: '#022c22',
+          50: '#F0F5F7',
+          100: '#DCE7E7',
+          200: '#B9CFCF',
+          300: '#8FADB0',
+          400: '#577877',
+          500: '#355E61',
+          600: '#295255',
+          700: '#203f42',
+          800: '#1A2F2D',
+          900: '#162623',
+          950: '#0D1A18',
+        },
+        // Brand tokens — Nordic Minimalist
+        brand: {
+          DEFAULT: '#295255',
+          primary: '#295255',
+          hover: '#203f42',
+          surface: '#F0F5F7',
+          dark: '#162623',
+          muted: '#577877',
         },
         // Warm Slate / Zinc neutrals
         surface: {
-          light: '#f8fafc',
+          light: '#F0F5F7',
           dark: '#09090b',
         },
         // Luxury Gold / Amber accents
@@ -54,8 +64,8 @@ export default {
         'soft': '0 1px 3px 0 rgb(0 0 0 / 0.04), 0 4px 12px -2px rgb(0 0 0 / 0.06)',
         'soft-lg': '0 4px 20px -4px rgb(0 0 0 / 0.08), 0 12px 40px -12px rgb(0 0 0 / 0.12)',
         'soft-xl': '0 8px 30px -6px rgb(0 0 0 / 0.1), 0 20px 60px -15px rgb(0 0 0 / 0.15)',
-        'glow': '0 0 20px -2px rgb(5 150 105 / 0.25)',
-        'glow-accent': '0 0 20px -2px rgb(217 119 6 / 0.3)',
+        'glow': '0 0 20px -2px rgb(41 82 85 / 0.25)',
+        'glow-accent': '0 0 20px -2px rgb(41 82 85 / 0.3)',
         'glass': '0 8px 32px -8px rgb(0 0 0 / 0.12)',
       },
       animation: {
@@ -106,6 +116,9 @@ export default {
       },
       backdropBlur: {
         xs: '2px',
+      },
+      transitionTimingFunction: {
+        spring: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
       },
     },
   },

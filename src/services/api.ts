@@ -133,7 +133,9 @@ function mapRowToProperty(row: Record<string, unknown>): Property {
 /* extras). Detail pages fetch the full row via fetchPropertyById.       */
 /* ------------------------------------------------------------------ */
 
-const CARD_COLUMNS = [
+// Kept exported as the documented tuned projection (feeds currently use
+// select('*') to stay immune to column drift such as daira/is_verified).
+export const CARD_COLUMNS = [
   'id',
   'title',
   'operation_type',
@@ -182,15 +184,24 @@ export interface FetchPageOptions {
 function buildPropertyQuery(filters?: SearchFilters, options?: FetchPageOptions) {
   const limit = options?.limit ?? FEED_PAGE_SIZE
   const offset = options?.offset ?? 0
+  // select('*') keeps feeds immune to PostgREST 42703 from any single
+  // missing column (previously daira, is_verified). Server-side filters
+  // below only touch confirmed-existing columns.
   let query = supabase
     .from('properties')
-    .select(CARD_COLUMNS)
+    .select('*')
     .eq('is_published', true)
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
 
   if (!filters) return query
 
+  if (filters.operationType) {
+    query = query.eq('operation_type', filters.operationType)
+  }
+  if (filters.wilayaId !== undefined && filters.wilayaId !== null) {
+    query = query.eq('wilaya_id', Number(filters.wilayaId))
+  }
   if (filters.propertyType) {
     query = query.eq('property_type', filters.propertyType)
   }
@@ -230,8 +241,7 @@ export function invalidatePropertiesCache(): void {
 }
 
 async function fetchPropertiesUncached(filters?: SearchFilters, options?: FetchPageOptions): Promise<Property[]> {
-  const { data, error, count } = await buildPropertyQuery(filters, options)
-  console.log('Fetched properties result:', { data, error, count });
+  const { data, error } = await buildPropertyQuery(filters, options)
 
   if (error) {
     console.error('Error fetching properties:', error)
@@ -242,8 +252,10 @@ async function fetchPropertiesUncached(filters?: SearchFilters, options?: FetchP
 
   let properties = (data as unknown as Record<string, unknown>[]).map(mapRowToProperty)
 
-  // Client-side filters (support both `operation`/`operation_type`,
-  // `wilaya`/`wilaya_id`, `surface`/`area`, `rooms`/`bedrooms` variants)
+  // Client-side refinements (support both `operation`/`operation_type`,
+  // `wilaya`/`wilaya_id`, `surface`/`area`, `rooms`/`bedrooms` variants).
+  // operationType/wilayaId are already narrowed server-side; re-checking
+  // here is a harmless no-op that guards against stale cache entries.
   if (filters?.operationType) {
     const op = String(filters.operationType).toLowerCase()
     properties = properties.filter((p) => String(p.operationType || '').toLowerCase() === op)
@@ -322,14 +334,13 @@ export async function fetchFeaturedProperties(limit = 4): Promise<Property[]> {
 }
 
 async function fetchFeaturedUncached(limit: number): Promise<Property[]> {
-  const { data, error, count } = await supabase
+  const { data, error } = await supabase
     .from('properties')
-    .select(CARD_COLUMNS)
+    .select('*')
     .eq('is_published', true)
     .eq('is_featured', true)
     .order('created_at', { ascending: false })
     .limit(limit)
-  console.log('Fetched properties result:', { data, error, count });
 
   if (error) {
     console.error('Error fetching featured properties:', error)
@@ -438,7 +449,8 @@ export async function fetchFavoriteProperties(userId: string): Promise<Property[
   const ids = await getFavoriteIds(userId)
   if (ids.length === 0) return []
 
-  const { data, error } = await supabase.from('properties').select(CARD_COLUMNS).in('id', ids)
+  // select('*') avoids 42703 from column drift (daira/is_verified).
+  const { data, error } = await supabase.from('properties').select('*').in('id', ids)
 
   if (error) {
     console.error('Error fetching favorite properties:', error)

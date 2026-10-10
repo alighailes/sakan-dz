@@ -159,6 +159,20 @@ CREATE TABLE IF NOT EXISTS saved_searches (
 CREATE INDEX IF NOT EXISTS idx_saved_searches_user ON saved_searches(user_id);
 
 -- ============================================================
+-- Push Subscriptions Table (Web Push fan-out targets)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL UNIQUE,
+  p256dh TEXT NOT NULL DEFAULT '',
+  auth TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
+
+-- ============================================================
 -- Row Level Security (RLS)
 -- ============================================================
 
@@ -167,6 +181,7 @@ ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE favorites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE saved_searches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
 
 -- Properties Policies
 CREATE POLICY "Properties are viewable by everyone"
@@ -259,6 +274,23 @@ CREATE POLICY "Authenticated users can create saved searches"
 
 CREATE POLICY "Users can delete own saved searches"
   ON saved_searches FOR DELETE
+  USING (auth.uid() = user_id);
+
+-- Push Subscriptions Policies (users manage only their own endpoints)
+CREATE POLICY "Users can view own push subscriptions"
+  ON push_subscriptions FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Authenticated users can create push subscriptions"
+  ON push_subscriptions FOR INSERT
+  WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
+
+CREATE POLICY "Users can update own push subscriptions"
+  ON push_subscriptions FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own push subscriptions"
+  ON push_subscriptions FOR DELETE
   USING (auth.uid() = user_id);
 
 -- ============================================================
