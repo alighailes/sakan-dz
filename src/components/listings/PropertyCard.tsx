@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
-import { Heart, BedDouble, Bath, MapPin, Eye, MessageCircle } from 'lucide-react'
+import { useState } from 'react'
+import { Heart, BedDouble, Bath, MapPin, Eye, MessageCircle, Users, Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useLocale } from '@/i18n'
@@ -16,16 +17,27 @@ import { PriceBenchmarkBadge } from '@/components/PriceBenchmarkBadge'
 import { LegalStatusBadge } from '@/components/listings/LegalStatusBadge'
 import { calculatePriceBenchmark } from '@/lib/priceBenchmark'
 import { useProperties } from '@/hooks/useProperties'
+import { useAuthStore } from '@/stores/authStore'
+import { fetchUserGroup, toggleSharedProperty } from '@/services/collaborativeFavoritesApi'
 import type { Property } from '@/types'
 
 interface PropertyCardProps {
   property: Property
+  /** Hide the Darna Duo quick-add button (e.g. inside the Duo tab where the card is already shared). */
+  showDuoAction?: boolean
+  /** Controlled Duo state — when provided, the button reflects it instead of its internal state. */
+  duoAdded?: boolean
+  /** Controlled Duo toggle — when provided, called instead of the internal shared-list API. */
+  onDuoToggle?: (propertyId: string) => void | Promise<void>
 }
 
-export function PropertyCard({ property }: PropertyCardProps) {
+export function PropertyCard({ property, showDuoAction = true, duoAdded, onDuoToggle }: PropertyCardProps) {
   const { locale, t } = useLocale()
   const { toggleFavorite, isFavorite } = useFavoritesStore()
+  const { user } = useAuthStore()
   const { mode } = useCurrencyStore()
+  const [duoLoading, setDuoLoading] = useState(false)
+  const [duoDone, setDuoDone] = useState(false)
   const fav = isFavorite(property.id)
   const wilaya = WILAYAS.find((w) => w.id === property.wilayaId)
   const { properties: allProperties } = useProperties(undefined, { limit: 60 })
@@ -95,6 +107,42 @@ export function PropertyCard({ property }: PropertyCardProps) {
         >
           <Heart className={cn('h-4 w-4 transition-transform duration-200', fav && 'fill-current scale-110')} />
         </button>
+
+        {/* Duo Favorite / Partner button */}
+        {showDuoAction && user && (
+          <button
+            onClick={async (e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              if (onDuoToggle) {
+                await onDuoToggle(property.id)
+              } else {
+                setDuoLoading(true)
+                try {
+                  const group = await fetchUserGroup()
+                  if (group) {
+                    await toggleSharedProperty(group.id, property.id, {})
+                    setDuoDone(true)
+                  }
+                } catch {
+                } finally {
+                  setDuoLoading(false)
+                }
+              }
+            }}
+            className={cn(
+              'absolute right-3 top-14 flex h-9 w-9 items-center justify-center rounded-full backdrop-blur-md transition-all duration-200 active:scale-90',
+              duoAdded || duoDone
+                ? 'bg-primary-600 text-white shadow-lg shadow-primary-600/30'
+                : 'bg-white/80 text-zinc-600 hover:bg-white hover:text-primary-600 dark:bg-zinc-900/80 dark:text-zinc-400'
+            )}
+            disabled={duoLoading}
+            title={locale === 'ar' ? 'إضافة إلى Darna Duo' : 'Ajouter à Darna Duo'}
+          >
+            <Users className={cn('h-4 w-4 transition-transform duration-200', (duoAdded || duoDone) && 'scale-110')} />
+            {duoLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+          </button>
+        )}
 
         {/* Price pill - bottom of image */}
         <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between">
