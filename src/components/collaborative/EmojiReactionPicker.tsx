@@ -18,7 +18,7 @@ interface EmojiReactionPickerProps {
 export function EmojiReactionPicker({ value, onSelect, disabled }: EmojiReactionPickerProps) {
   return (
     <div
-      className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white/80 px-2 py-1 shadow-sm backdrop-blur transition-colors dark:border-zinc-700 dark:bg-zinc-900/80"
+      className="inline-flex items-center gap-0.5 rounded-full border border-zinc-200 bg-white px-2 py-1.5 shadow-sm backdrop-blur-md dark:border-zinc-700 dark:bg-zinc-900"
       role="radiogroup"
       aria-label="Partner reaction"
     >
@@ -39,14 +39,23 @@ export function EmojiReactionPicker({ value, onSelect, disabled }: EmojiReaction
               onSelect(r.value)
             }}
             className={cn(
-              'flex h-8 w-8 items-center justify-center rounded-full text-xl transition-all duration-200',
+              'flex h-10 w-10 select-none items-center justify-center rounded-full transition-all duration-200 active:scale-90',
               active
-                ? 'scale-110 bg-primary-100 shadow-glow ring-2 ring-primary-500 dark:bg-primary-900/50'
-                : 'opacity-60 hover:scale-105 hover:bg-zinc-100 hover:opacity-100 dark:hover:bg-zinc-800',
-              disabled && 'cursor-not-allowed opacity-40'
+                ? 'scale-110 bg-primary-100 opacity-100 shadow-glow ring-2 ring-primary-500 dark:bg-primary-900/60'
+                : 'opacity-100 hover:scale-110 hover:bg-zinc-100 dark:hover:bg-zinc-800',
+              disabled && 'cursor-not-allowed opacity-50'
             )}
           >
-            <span aria-hidden>{r.emoji}</span>
+            <span
+              aria-hidden
+              className="text-2xl leading-none"
+              style={{
+                fontFamily:
+                  '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif',
+              }}
+            >
+              {r.emoji}
+            </span>
           </button>
         )
       })}

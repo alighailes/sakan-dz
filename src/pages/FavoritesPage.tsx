@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Heart, Loader2, LogIn, UserPlus } from 'lucide-react'
+import { Heart, Loader2, LogIn, UserPlus, CalendarClock, MapPin } from 'lucide-react'
 import { PropertyCard } from '@/components/listings/PropertyCard'
 import { PropertyCardSkeleton } from '@/components/listings/PropertyCardSkeleton'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import { DarnaDuoHeader } from '@/components/darnaDuo/DarnaDuoHeader'
 import { ReactionPicker } from '@/components/darnaDuo/ReactionPicker'
 import { SharedNotesBadge } from '@/components/darnaDuo/SharedNotesBadge'
+import { VisitSchedulerModal } from '@/components/darnaDuo/VisitSchedulerModal'
+import { DarnaActivityTimeline } from '@/components/darnaDuo/DarnaActivityTimeline'
 import { useProperties } from '@/hooks/useProperties'
 import { useFavoritesStore } from '@/stores/favoritesStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -42,6 +44,8 @@ export function FavoritesPage() {
   const [joinError, setJoinError] = useState<string | null>(null)
   const [pendingDuo, setPendingDuo] = useState<string | null>(null)
   const [actionId, setActionId] = useState<string | null>(null)
+  const [schedulerProperty, setSchedulerProperty] = useState<{ propertyId: string; title: string } | null>(null)
+  const [schedulerLoading, setSchedulerLoading] = useState(false)
 
   // Pull the logged-in user's live favorites from Supabase
   useEffect(() => {
@@ -157,6 +161,30 @@ export function FavoritesPage() {
     }
   }
 
+  const handleScheduleVisit = async (visitAt: string, notes: string) => {
+    if (!group || !user?.id || !schedulerProperty) return
+    setSchedulerLoading(true)
+    try {
+      const updated = await toggleSharedProperty(group.id, schedulerProperty.propertyId, {
+        visitStatus: 'to_visit',
+        visitAt,
+        note: notes || undefined,
+      })
+      if (updated) {
+        setEntries((prev) =>
+          prev.map((e) => (e.propertyId === schedulerProperty.propertyId ? updated : e))
+        )
+      }
+      setSchedulerProperty(null)
+    } finally {
+      setSchedulerLoading(false)
+    }
+  }
+
+  const openScheduler = (propertyId: string, title: string) => {
+    setSchedulerProperty({ propertyId, title })
+  }
+
   const handleToggleShared = async (propertyId: string) => {
     if (!user?.id) return
     let activeGroup = group
@@ -209,6 +237,27 @@ export function FavoritesPage() {
     }))
     .filter((x) => x.property !== null)
   const addableFavorites = favoriteProperties.filter((p) => !sharedIds.has(p.id))
+
+  // Properties map for activity timeline
+  const propertiesMap = useMemo(
+    () => new Map(properties.map((p) => [p.id, { title: p.title }])),
+    [properties]
+  )
+
+  // Upcoming visits (to_visit status with visitAt in the future)
+  const upcomingVisits = useMemo(() => {
+    const now = new Date()
+    return entries
+      .map((entry) => {
+        const property = properties.find((p) => p.id === entry.propertyId)
+        if (!property || entry.visitStatus !== 'to_visit' || !entry.visitAt) return null
+        const visitDate = new Date(entry.visitAt)
+        if (visitDate < now) return null
+        return { entry, property, visitDate }
+      })
+      .filter((x): x is { entry: SharedPropertyEntry; property: typeof properties[0]; visitDate: Date } => x !== null)
+      .sort((a, b) => a.visitDate.getTime() - b.visitDate.getTime())
+  }, [entries, properties])
 
   const tabBtn = (active: boolean) =>
     cn(
@@ -310,7 +359,61 @@ export function FavoritesPage() {
                   }
                 />
               ) : (
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <>
+                  {/* Upcoming Visits */}
+                  {upcomingVisits.length > 0 && (
+                    <div className="mb-5 rounded-2xl border border-sky-200 bg-sky-50/60 p-4 shadow-sm backdrop-blur-xl dark:border-sky-900/40 dark:bg-sky-950/20">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="flex items-center gap-2 text-sm font-semibold text-sky-800 dark:text-sky-300">
+                          <CalendarClock className="h-4 w-4" />
+                          {locale === 'ar' ? 'مواعد المعاينات القادمة' : 'Prochaines visites'}
+                        </h3>
+                        <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-sky-600 px-2 text-xs font-bold text-white">
+                          {upcomingVisits.length}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {upcomingVisits.slice(0, 3).map(({ property, visitDate }) => (
+                          <Button
+                            key={property.id}
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5 bg-white/80 dark:bg-zinc-800/80"
+                            onClick={() => openScheduler(property.id, property.title)}
+                          >
+                            <MapPin className="h-3.5 w-3.5" />
+                            <span className="truncate max-w-[200px]">
+                              {property.title} — {visitDate.toLocaleDateString(locale === 'ar' ? 'ar-DZ' : 'fr-FR', {
+                                weekday: 'short',
+                                day: 'numeric',
+                                month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </Button>
+                        ))}
+                        {upcomingVisits.length > 3 && (
+                          <Button variant="ghost" size="sm" className="text-xs">
+                            {locale === 'ar' ? `+${upcomingVisits.length - 3} أخرى` : `+${upcomingVisits.length - 3} autres`}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Activity Timeline */}
+                  {group && (
+                    <div className="mb-5">
+                      <DarnaActivityTimeline
+                        group={group}
+                        currentUserId={user.id}
+                        properties={propertiesMap}
+                      />
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {sharedProperties.map(({ entry, property }) => {
                     if (!property) return null
                     const partnerName =
@@ -363,7 +466,7 @@ export function FavoritesPage() {
                     )
                   })}
                 </div>
-              )}
+              </>)}
 
               {/* Add private favorites into the shared group */}
               {addableFavorites.length > 0 && (
@@ -395,6 +498,17 @@ export function FavoritesPage() {
             </>
           )}
         </div>
+      )}
+
+      {/* Visit Scheduler Modal */}
+      {schedulerProperty && (
+        <VisitSchedulerModal
+          isOpen
+          onClose={() => setSchedulerProperty(null)}
+          property={{ id: schedulerProperty.propertyId, title: schedulerProperty.title } as any}
+          onSchedule={handleScheduleVisit}
+          loading={schedulerLoading}
+        />
       )}
 
       {/* Darna Duo invitation accept modal (?duo=CODE) */}
