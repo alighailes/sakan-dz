@@ -425,3 +425,101 @@ CREATE POLICY "Users can delete own property images"
 
 ALTER TABLE IF EXISTS profiles
   ADD COLUMN IF NOT EXISTS role TEXT CHECK (role IN ('buyer', 'seller'));
+
+-- ============================================================
+-- Collaborative Favorites ("مفضلة العائلة والشريك")
+-- Two-member shared favorites: invite-code groups, member reactions,
+-- notes and visit statuses on shared properties.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS shared_favorite_groups (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  invite_code TEXT NOT NULL UNIQUE,
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS shared_favorite_members (
+  group_id UUID NOT NULL REFERENCES shared_favorite_groups(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  display_name TEXT NOT NULL DEFAULT '',
+  avatar_url TEXT,
+  joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (group_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS shared_favorite_items (
+  group_id UUID NOT NULL REFERENCES shared_favorite_groups(id) ON DELETE CASCADE,
+  property_id UUID NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+  added_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  note TEXT NOT NULL DEFAULT '',
+  reaction TEXT CHECK (reaction IN ('love', 'happy', 'thinking', 'skeptical', 'sad')),
+  reaction_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  visit_status TEXT NOT NULL DEFAULT 'none'
+    CHECK (visit_status IN ('none', 'to_contact', 'to_visit', 'visited')),
+  visit_at TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (group_id, property_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_shared_members_user ON shared_favorite_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_shared_items_group ON shared_favorite_items(group_id);
+
+ALTER TABLE shared_favorite_groups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE shared_favorite_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE shared_favorite_items ENABLE ROW LEVEL SECURITY;
+
+-- Members can view their own groups, memberships and shared items.
+CREATE POLICY "Members can view own shared groups"
+  ON shared_favorite_groups FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM shared_favorite_members m
+      WHERE m.group_id = shared_favorite_groups.id AND m.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Authenticated users can create shared groups"
+  ON shared_favorite_groups FOR INSERT
+  WITH CHECK (auth.uid() = created_by);
+
+CREATE POLICY "Members can view group memberships"
+  ON shared_favorite_members FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM shared_favorite_members m
+      WHERE m.group_id = shared_favorite_members.group_id AND m.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can join shared groups"
+  ON shared_favorite_members FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Members can view shared items"
+  ON shared_favorite_items FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM shared_favorite_members m
+      WHERE m.group_id = shared_favorite_items.group_id AND m.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Members can manage shared items"
+  ON shared_favorite_items FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM shared_favorite_members m
+      WHERE m.group_id = shared_favorite_items.group_id AND m.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM shared_favorite_members m
+      WHERE m.group_id = shared_favorite_items.group_id AND m.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Members can leave shared groups"
+  ON shared_favorite_members FOR DELETE
+  USING (auth.uid() = user_id);
