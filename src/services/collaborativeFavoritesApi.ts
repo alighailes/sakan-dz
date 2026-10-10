@@ -10,10 +10,14 @@ import { supabase } from '@/lib/supabase'
 export type SharedReaction = 'love' | 'happy' | 'thinking' | 'skeptical' | 'sad'
 export type VisitStatus = 'none' | 'to_contact' | 'to_visit' | 'visited'
 
+export type SharedMemberRole = 'owner' | 'member'
+
 export interface SharedMember {
   userId: string
   displayName: string
   avatarUrl?: string | null
+  /** Derived client-side: creator (created_by) is 'owner', others 'member'. */
+  role: SharedMemberRole
 }
 
 export interface SharedPropertyEntry {
@@ -31,6 +35,7 @@ export interface SharedPropertyEntry {
 export interface SharedGroup {
   id: string
   inviteCode: string
+  createdBy: string | null
   members: SharedMember[]
 }
 
@@ -102,7 +107,8 @@ async function getDisplayName(userId: string): Promise<string> {
 
 function mapMembers(
   rows: Record<string, unknown>[],
-  fallbackNames: Map<string, string>
+  fallbackNames: Map<string, string>,
+  createdBy: string | null
 ): SharedMember[] {
   return rows.map((r) => {
     const userId = String(r.user_id ?? '')
@@ -113,6 +119,7 @@ function mapMembers(
           ? r.display_name.trim()
           : fallbackNames.get(userId)) ?? 'شريك',
       avatarUrl: (r.avatar_url as string | null | undefined) ?? null,
+      role: createdBy !== null && userId === createdBy ? 'owner' : 'member',
     }
   })
 }
@@ -120,7 +127,7 @@ function mapMembers(
 async function loadGroupWithMembers(groupId: string): Promise<SharedGroup | null> {
   const { data: group, error: groupError } = await supabase
     .from('shared_favorite_groups')
-    .select('id, invite_code')
+    .select('id, invite_code, created_by')
     .eq('id', groupId)
     .single()
   if (groupError || !group) return null
@@ -142,10 +149,13 @@ async function loadGroupWithMembers(groupId: string): Promise<SharedGroup | null
   )
 
   const g = group as unknown as Record<string, unknown>
+  const createdBy =
+    typeof g.created_by === 'string' && g.created_by ? g.created_by : null
   return {
     id: String(g.id ?? groupId),
     inviteCode: String(g.invite_code ?? ''),
-    members: mapMembers(rows, names),
+    createdBy,
+    members: mapMembers(rows, names, createdBy),
   }
 }
 
@@ -341,4 +351,59 @@ export async function removeSharedProperty(
   } catch {
     return false
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Darna Duo aliases — same shared-favorites backend, Duo branding.     */
+/* ------------------------------------------------------------------ */
+
+/** Shareable Darna Duo invite link: `/favorites?duo=CODE`. */
+export function buildDuoLink(code: string): string {
+  const path = `/favorites?duo=${encodeURIComponent(code)}`
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}${path}`
+  }
+  return path
+}
+
+/** Fetch the current user's active Darna Duo group (members + partner). */
+export async function getMyGroup(): Promise<SharedGroup | null> {
+  return fetchUserGroup()
+}
+
+/**
+ * Create a new Darna Duo group; the creator auto-joins as 'owner'.
+ * Idempotent: returns the existing group when the user already has one.
+ */
+export async function createGroup(_name?: string): Promise<SharedGroup | null> {
+  void _name
+  return fetchUserGroup()
+}
+
+export interface DarnaDuoInteractionPatch {
+  reaction?: SharedReaction | null
+  note?: string
+  visit_status?: VisitStatus
+  visit_date?: string | null
+}
+
+/** Upsert a property interaction (reaction / note / visit status). */
+export async function addOrUpdateInteraction(
+  groupId: string,
+  propertyId: string,
+  patch: DarnaDuoInteractionPatch = {}
+): Promise<SharedPropertyEntry | null> {
+  return toggleSharedProperty(groupId, propertyId, {
+    ...(patch.reaction !== undefined ? { reaction: patch.reaction } : {}),
+    ...(patch.note !== undefined ? { note: patch.note } : {}),
+    ...(patch.visit_status !== undefined ? { visitStatus: patch.visit_status } : {}),
+    ...(patch.visit_date !== undefined ? { visitAt: patch.visit_date } : {}),
+  })
+}
+
+/** Fetch full shared interaction data (reactions, notes, visit statuses). */
+export async function fetchGroupProperties(
+  groupId: string
+): Promise<SharedPropertyEntry[]> {
+  return fetchSharedInteractions(groupId)
 }

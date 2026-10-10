@@ -5,9 +5,9 @@ import { PropertyCard } from '@/components/listings/PropertyCard'
 import { PropertyCardSkeleton } from '@/components/listings/PropertyCardSkeleton'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
-import { CollaborativeHeader } from '@/components/collaborative/CollaborativeHeader'
-import { EmojiReactionPicker } from '@/components/collaborative/EmojiReactionPicker'
-import { SharedNotesAndStatus } from '@/components/collaborative/SharedNotesAndStatus'
+import { DarnaDuoHeader } from '@/components/darnaDuo/DarnaDuoHeader'
+import { ReactionPicker } from '@/components/darnaDuo/ReactionPicker'
+import { SharedNotesBadge } from '@/components/darnaDuo/SharedNotesBadge'
 import { useProperties } from '@/hooks/useProperties'
 import { useFavoritesStore } from '@/stores/favoritesStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -40,6 +40,7 @@ export function FavoritesPage() {
   const [sharedLoading, setSharedLoading] = useState(false)
   const [sharedError, setSharedError] = useState<string | null>(null)
   const [joinError, setJoinError] = useState<string | null>(null)
+  const [pendingDuo, setPendingDuo] = useState<string | null>(null)
   const [actionId, setActionId] = useState<string | null>(null)
 
   // Pull the logged-in user's live favorites from Supabase
@@ -80,7 +81,7 @@ export function FavoritesPage() {
     }
   }, [user?.id, refreshShared])
 
-  // Join via invite link: /favorites?join=CODE
+  // Join via invite link: /favorites?join=CODE (legacy, auto-joins)
   useEffect(() => {
     const code = searchParams.get('join')
     if (!code || !user?.id) return
@@ -104,6 +105,18 @@ export function FavoritesPage() {
       cancelled = true
     }
   }, [searchParams, user?.id, locale, setSearchParams])
+
+  // Darna Duo invite: /favorites?duo=CODE triggers an accept modal
+  useEffect(() => {
+    const code = searchParams.get('duo')
+    if (!code) return
+    if (!user?.id) {
+      setTab('shared')
+      return
+    }
+    setPendingDuo(code.trim().toUpperCase())
+    setTab('shared')
+  }, [searchParams, user?.id])
 
   const handleReaction = async (propertyId: string, reaction: SharedReaction) => {
     if (!group || !user?.id) return
@@ -175,9 +188,16 @@ export function FavoritesPage() {
       setGroup(g)
       setEntries(await fetchSharedInteractions(g.id))
       setTab('shared')
+      setPendingDuo(null)
+      setSearchParams({}, { replace: true })
     } else {
       setJoinError(locale === 'ar' ? 'رمز الدعوة غير صالح.' : 'Code d’invitation invalide.')
     }
+  }
+
+  const handleDeclineDuo = () => {
+    setPendingDuo(null)
+    setSearchParams({}, { replace: true })
   }
 
   const favoriteProperties = properties.filter((p) => favorites.includes(p.id))
@@ -205,10 +225,10 @@ export function FavoritesPage() {
       {/* Tab toggle */}
       <div className="mb-6 flex items-center gap-2">
         <button type="button" onClick={() => setTab('private')} className={tabBtn(tab === 'private')}>
-          {locale === 'ar' ? 'مفضلتي الخاصة' : 'Mes favoris'}
+          {locale === 'ar' ? 'مفضلتي الفردية' : 'Mes favoris'}
         </button>
         <button type="button" onClick={() => setTab('shared')} className={tabBtn(tab === 'shared')}>
-          {locale === 'ar' ? 'المفضلة المشتركة (شخصين)' : 'Favoris partagés (2)'}
+          {locale === 'ar' ? 'Darna Duo | مفضلة الشريك' : 'Darna Duo | Partenaire'}
         </button>
       </div>
 
@@ -260,7 +280,7 @@ export function FavoritesPage() {
             />
           ) : (
             <>
-              <CollaborativeHeader
+              <DarnaDuoHeader
                 group={group}
                 currentUserId={user.id}
                 loading={sharedLoading}
@@ -304,14 +324,14 @@ export function FavoritesPage() {
                       >
                         <PropertyCard property={property} />
                         <div className="flex justify-center">
-                          <EmojiReactionPicker
+                          <ReactionPicker
                             value={entry.reaction}
                             disabled={actionId === property.id}
                             onSelect={(r) => void handleReaction(property.id, r)}
                           />
                         </div>
                         <div className="px-1 pb-1">
-                          <SharedNotesAndStatus
+                          <SharedNotesBadge
                             note={entry.note}
                             partnerName={partnerName}
                             visitStatus={entry.visitStatus}
@@ -374,6 +394,40 @@ export function FavoritesPage() {
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* Darna Duo invitation accept modal (?duo=CODE) */}
+      {pendingDuo && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+          onClick={handleDeclineDuo}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-xl animate-scale-in dark:border-zinc-700 dark:bg-zinc-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-600/10 dark:bg-primary-900/30">
+              <UserPlus className="h-7 w-7 text-primary-600 dark:text-primary-400" />
+            </div>
+            <h3 className="text-lg font-bold text-zinc-900 dark:text-white">Darna Duo</h3>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              {locale === 'ar'
+                ? 'دعاك شريكك للانضمام إلى مفضلته المشتركة. هل تقبل الدعوة؟'
+                : 'Votre partenaire vous invite à rejoindre ses favoris partagés. Accepter ?'}
+            </p>
+            <p className="mt-2 text-xl font-bold tracking-[0.3em] text-primary-600 dark:text-primary-400">
+              {pendingDuo}
+            </p>
+            <div className="mt-4 flex gap-2">
+              <Button className="flex-1" onClick={() => void handleJoin(pendingDuo)}>
+                {locale === 'ar' ? 'قبول الدعوة' : 'Accepter'}
+              </Button>
+              <Button variant="outline" className="flex-1" onClick={handleDeclineDuo}>
+                {locale === 'ar' ? 'رفض' : 'Refuser'}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>
