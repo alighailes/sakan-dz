@@ -21,6 +21,7 @@ import {
   joinGroupByCode,
   removeSharedProperty,
   toggleSharedProperty,
+  type DuoJoinStatus,
   type SharedGroup,
   type SharedPropertyEntry,
   type SharedReaction,
@@ -32,9 +33,18 @@ type FavoritesTab = 'private' | 'shared'
 export function FavoritesPage() {
   const { properties, loading } = useProperties(undefined, { limit: 100 })
   const { favorites, loadUserFavorites } = useFavoritesStore()
-  const { user } = useAuthStore()
+  const { user, profile } = useAuthStore()
   const { locale, t } = useLocale()
   const [searchParams, setSearchParams] = useSearchParams()
+
+  const joinErrorMessage = (status: DuoJoinStatus): string =>
+    status === 'own_code'
+      ? locale === 'ar'
+        ? 'لا يمكنك استخدام رمز الدعوة الخاص بك'
+        : 'Vous ne pouvez pas utiliser votre propre code d’invitation'
+      : locale === 'ar'
+        ? 'رمز الدعوة غير موجود أو غير صالح'
+        : 'Code d’invitation introuvable ou invalide'
 
   const [tab, setTab] = useState<FavoritesTab>('private')
   const [group, setGroup] = useState<SharedGroup | null>(null)
@@ -85,6 +95,31 @@ export function FavoritesPage() {
     }
   }, [user?.id, refreshShared])
 
+  // Refetch shared entries whenever the Duo tab becomes active, so a toggle
+  // made on a listing card is reflected immediately instead of showing a
+  // stale (possibly empty) list after a success toast. A failed background
+  // sync returns [] — never let that wipe already-loaded entries.
+  useEffect(() => {
+    if (tab !== 'shared' || !user?.id || !group?.id) return
+    let cancelled = false
+    void (async () => {
+      setSharedLoading(true)
+      try {
+        const fresh = await fetchSharedInteractions(group.id)
+        if (!cancelled) {
+          setEntries((prev) =>
+            fresh.length > 0 || prev.length === 0 ? fresh : prev
+          )
+        }
+      } finally {
+        if (!cancelled) setSharedLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [tab, user?.id, group?.id])
+
   // Join via invite link: /favorites?join=CODE (legacy, auto-joins)
   useEffect(() => {
     const code = searchParams.get('join')
@@ -92,17 +127,20 @@ export function FavoritesPage() {
     let cancelled = false
     void (async () => {
       setJoinError(null)
-      const g = await joinGroupByCode(code)
+      const result = await joinGroupByCode(code)
       if (cancelled) return
-      if (g) {
+      let g = result.group
+      if (result.status === 'joined' && !g) {
+        g = await fetchUserGroup()
+        if (cancelled) return
+      }
+      if (result.status === 'joined' && g) {
         setGroup(g)
         setEntries(await fetchSharedInteractions(g.id))
         setTab('shared')
         setSearchParams({}, { replace: true })
       } else {
-        setJoinError(
-          locale === 'ar' ? 'رمز الدعوة غير صالح.' : 'Code d’invitation invalide.'
-        )
+        setJoinError(result.message || joinErrorMessage(result.status))
       }
     })()
     return () => {
@@ -202,25 +240,42 @@ export function FavoritesPage() {
         }
       } else {
         const created = await toggleSharedProperty(activeGroup.id, propertyId, {})
-        if (created) setEntries((prev) => [created, ...prev])
+        // created != null means the row was written AND read back (RETURNING).
+        // Immediately refetch and merge (never replace) so the UI reflects
+        // server truth while a failed sync can't wipe local state.
+        if (created) {
+          const fresh = await fetchSharedInteractions(activeGroup.id)
+          setEntries((prev) => {
+            const merged = new Map(prev.map((e) => [e.propertyId, e]))
+            merged.set(created.propertyId, created)
+            for (const e of fresh) merged.set(e.propertyId, e)
+            return [...merged.values()]
+          })
+        }
       }
     } finally {
       setActionId(null)
     }
   }
 
-  const handleJoin = async (code: string) => {
+  const handleJoin = async (code: string): Promise<boolean> => {
     setJoinError(null)
-    const g = await joinGroupByCode(code)
-    if (g) {
+    const result = await joinGroupByCode(code)
+    let g = result.group
+    if (result.status === 'joined' && !g) {
+      // RPC joined server-side but the group read was blocked — refresh cache.
+      g = await fetchUserGroup()
+    }
+    if (result.status === 'joined' && g) {
       setGroup(g)
       setEntries(await fetchSharedInteractions(g.id))
       setTab('shared')
       setPendingDuo(null)
       setSearchParams({}, { replace: true })
-    } else {
-      setJoinError(locale === 'ar' ? 'رمز الدعوة غير صالح.' : 'Code d’invitation invalide.')
+      return true
     }
+    setJoinError(result.message || joinErrorMessage(result.status))
+    return false
   }
 
   const handleDeclineDuo = () => {
@@ -332,10 +387,11 @@ export function FavoritesPage() {
               <DarnaDuoHeader
                 group={group}
                 currentUserId={user.id}
+                ownInviteCode={profile?.invite_code ?? group?.inviteCode ?? null}
                 loading={sharedLoading}
                 joinError={joinError}
                 onCreate={() => void refreshShared()}
-                onJoin={(code) => void handleJoin(code)}
+                onJoin={handleJoin}
               />
               {sharedError && (
                 <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">

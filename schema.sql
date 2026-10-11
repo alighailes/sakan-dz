@@ -283,7 +283,7 @@ CREATE POLICY "Users can view own push subscriptions"
 
 CREATE POLICY "Authenticated users can create push subscriptions"
   ON push_subscriptions FOR INSERT
-  WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
+  WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can update own push subscriptions"
   ON push_subscriptions FOR UPDATE
@@ -385,9 +385,9 @@ CREATE TRIGGER on_auth_user_created
 -- ============================================================
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Authenticated users can view profiles"
+CREATE POLICY "Users can view own profile or agency profiles"
   ON profiles FOR SELECT
-  USING (auth.role() = 'authenticated');
+  USING (auth.uid() = id OR user_type = 'agency');
 
 CREATE POLICY "Users can update own profile"
   ON profiles FOR UPDATE
@@ -425,6 +425,15 @@ CREATE POLICY "Users can delete own property images"
 
 ALTER TABLE IF EXISTS profiles
   ADD COLUMN IF NOT EXISTS role TEXT CHECK (role IN ('buyer', 'seller'));
+
+-- Personal Darna Duo invite code: a partner entering this code is linked to
+-- the owner's shared favorites group (see joinGroupByCode).
+ALTER TABLE IF EXISTS profiles
+  ADD COLUMN IF NOT EXISTS invite_code TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_invite_code
+  ON profiles(invite_code)
+  WHERE invite_code IS NOT NULL;
 
 -- ============================================================
 -- Collaborative Favorites ("مفضلة العائلة والشريك")
@@ -469,57 +478,246 @@ ALTER TABLE shared_favorite_groups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shared_favorite_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shared_favorite_items ENABLE ROW LEVEL SECURITY;
 
+-- Helper avoids RLS recursion: a policy on shared_favorite_members cannot
+-- SELECT from shared_favorite_members itself (Postgres raises "infinite
+-- recursion detected in policy"). SECURITY DEFINER evaluates the membership
+-- check outside RLS so the group / member / item policies can share it safely.
+CREATE OR REPLACE FUNCTION public.is_shared_group_member(gid uuid, uid uuid)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM shared_favorite_members
+    WHERE group_id = gid AND user_id = uid
+  );
+$$;
+
+GRANT EXECUTE ON FUNCTION public.is_shared_group_member(uuid, uuid) TO authenticated;
+
 -- Members can view their own groups, memberships and shared items.
+DROP POLICY IF EXISTS "Members can view own shared groups" ON shared_favorite_groups;
 CREATE POLICY "Members can view own shared groups"
   ON shared_favorite_groups FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM shared_favorite_members m
-      WHERE m.group_id = shared_favorite_groups.id AND m.user_id = auth.uid()
-    )
-  );
+  USING (public.is_shared_group_member(id, auth.uid()));
 
+DROP POLICY IF EXISTS "Authenticated users can create shared groups" ON shared_favorite_groups;
 CREATE POLICY "Authenticated users can create shared groups"
   ON shared_favorite_groups FOR INSERT
   WITH CHECK (auth.uid() = created_by);
 
+DROP POLICY IF EXISTS "Members can view group memberships" ON shared_favorite_members;
 CREATE POLICY "Members can view group memberships"
   ON shared_favorite_members FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM shared_favorite_members m
-      WHERE m.group_id = shared_favorite_members.group_id AND m.user_id = auth.uid()
-    )
-  );
+  USING (public.is_shared_group_member(group_id, auth.uid()));
 
+DROP POLICY IF EXISTS "Users can join shared groups" ON shared_favorite_members;
 CREATE POLICY "Users can join shared groups"
   ON shared_favorite_members FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Members can view shared items" ON shared_favorite_items;
 CREATE POLICY "Members can view shared items"
   ON shared_favorite_items FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM shared_favorite_members m
-      WHERE m.group_id = shared_favorite_items.group_id AND m.user_id = auth.uid()
-    )
-  );
+  USING (public.is_shared_group_member(group_id, auth.uid()));
 
+DROP POLICY IF EXISTS "Members can manage shared items" ON shared_favorite_items;
 CREATE POLICY "Members can manage shared items"
   ON shared_favorite_items FOR ALL
-  USING (
-    EXISTS (
-      SELECT 1 FROM shared_favorite_members m
-      WHERE m.group_id = shared_favorite_items.group_id AND m.user_id = auth.uid()
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM shared_favorite_members m
-      WHERE m.group_id = shared_favorite_items.group_id AND m.user_id = auth.uid()
-    )
-  );
+  USING (public.is_shared_group_member(group_id, auth.uid()))
+  WITH CHECK (public.is_shared_group_member(group_id, auth.uid()));
 
 CREATE POLICY "Members can leave shared groups"
   ON shared_favorite_members FOR DELETE
   USING (auth.uid() = user_id);
+
+-- ============================================================
+-- Darna Duo join RPC. Client-side lookups of `shared_favorite_groups`
+-- and `profiles` by invite code are blocked by RLS for strangers
+-- (group rows are member-visible only; profiles are self/agency-visible
+-- only), so joining must happen server-side. SECURITY DEFINER evaluates
+-- outside RLS, following the is_shared_group_member pattern above.
+-- Errors: SELF_CODE (own personal code), INVALID_CODE (unknown code).
+-- Member rows omit display_name so the RPC also works on older tables.
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION public.join_or_create_duo_group(partner_invite_code TEXT)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  clean TEXT := upper(trim(partner_invite_code));
+  me uuid := auth.uid();
+  partner uuid;
+  gid uuid;
+  new_code TEXT;
+  alphabet TEXT := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  i INT;
+BEGIN
+  IF me IS NULL THEN
+    RAISE EXCEPTION 'NOT_AUTHENTICATED';
+  END IF;
+  IF clean IS NULL OR clean = '' THEN
+    RAISE EXCEPTION 'INVALID_CODE';
+  END IF;
+
+  -- 1) Direct group invite code.
+  SELECT id INTO gid FROM shared_favorite_groups WHERE invite_code = clean;
+  IF gid IS NOT NULL THEN
+    INSERT INTO shared_favorite_members (group_id, user_id)
+    VALUES (gid, me)
+    ON CONFLICT (group_id, user_id) DO NOTHING;
+    RETURN gid;
+  END IF;
+
+  -- 2) Personal profile invite code -> link the two accounts.
+  SELECT id INTO partner FROM profiles WHERE invite_code = clean;
+  IF partner IS NULL THEN
+    RAISE EXCEPTION 'INVALID_CODE';
+  END IF;
+  IF partner = me THEN
+    RAISE EXCEPTION 'SELF_CODE';
+  END IF;
+
+  -- Reuse the partner's latest group, or create one for both accounts.
+  SELECT group_id INTO gid
+  FROM shared_favorite_members
+  WHERE user_id = partner
+  ORDER BY joined_at DESC
+  LIMIT 1;
+
+  IF gid IS NULL THEN
+    LOOP
+      new_code := '';
+      FOR i IN 1..6 LOOP
+        new_code := new_code || substr(alphabet, (floor(random() * 32) + 1)::int, 1);
+      END LOOP;
+      BEGIN
+        gid := gen_random_uuid();
+        INSERT INTO shared_favorite_groups (id, created_by, invite_code)
+        VALUES (gid, partner, new_code);
+        EXIT;
+      EXCEPTION WHEN unique_violation THEN
+        gid := NULL;
+      END;
+    END LOOP;
+    INSERT INTO shared_favorite_members (group_id, user_id)
+    VALUES (gid, partner)
+    ON CONFLICT (group_id, user_id) DO NOTHING;
+  END IF;
+
+  INSERT INTO shared_favorite_members (group_id, user_id)
+  VALUES (gid, me)
+  ON CONFLICT (group_id, user_id) DO NOTHING;
+  RETURN gid;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.join_or_create_duo_group(TEXT) TO authenticated;
+
+-- ============================================================
+-- Structured Darna Duo join RPC. Same server-side join as above but
+-- with a JSON contract {success, code, message, group_id} so the client
+-- can surface the exact failure reason. Client-side lookups of groups /
+-- profiles by invite code are RLS-blocked for strangers, hence server-side.
+-- Codes: SELF_CODE (own personal code), INVALID_CODE (unknown code).
+-- Member rows omit display_name so the RPC also works on older tables.
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION public.validate_and_join_duo(invite_code_input TEXT)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  clean TEXT := upper(trim(invite_code_input));
+  me uuid := auth.uid();
+  partner uuid;
+  gid uuid;
+  new_code TEXT;
+  alphabet TEXT := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  i INT;
+BEGIN
+  IF me IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'code', 'NOT_AUTHENTICATED', 'message', 'Not authenticated.', 'group_id', NULL);
+  END IF;
+  IF clean IS NULL OR clean = '' THEN
+    RETURN jsonb_build_object('success', false, 'code', 'INVALID_CODE', 'message', 'Invite code not found or invalid.', 'group_id', NULL);
+  END IF;
+
+  -- 1) Direct group invite code.
+  SELECT id INTO gid FROM shared_favorite_groups WHERE invite_code = clean;
+  IF gid IS NOT NULL THEN
+    INSERT INTO shared_favorite_members (group_id, user_id)
+    VALUES (gid, me)
+    ON CONFLICT (group_id, user_id) DO NOTHING;
+    RETURN jsonb_build_object('success', true, 'code', 'JOINED', 'message', 'Accounts linked successfully.', 'group_id', gid);
+  END IF;
+
+  -- 2) Personal profile invite code -> link the two accounts.
+  SELECT id INTO partner FROM profiles WHERE invite_code = clean;
+  IF partner IS NULL THEN
+    RETURN jsonb_build_object('success', false, 'code', 'INVALID_CODE', 'message', 'Invite code not found or invalid.', 'group_id', NULL);
+  END IF;
+  IF partner = me THEN
+    RETURN jsonb_build_object('success', false, 'code', 'SELF_CODE', 'message', 'You cannot use your own invite code.', 'group_id', NULL);
+  END IF;
+
+  -- Reuse the partner's latest group, or create one for both accounts.
+  SELECT group_id INTO gid
+  FROM shared_favorite_members
+  WHERE user_id = partner
+  ORDER BY joined_at DESC
+  LIMIT 1;
+
+  IF gid IS NULL THEN
+    LOOP
+      new_code := '';
+      FOR i IN 1..6 LOOP
+        new_code := new_code || substr(alphabet, (floor(random() * 32) + 1)::int, 1);
+      END LOOP;
+      BEGIN
+        gid := gen_random_uuid();
+        INSERT INTO shared_favorite_groups (id, created_by, invite_code)
+        VALUES (gid, partner, new_code);
+        EXIT;
+      EXCEPTION WHEN unique_violation THEN
+        gid := NULL;
+      END;
+    END LOOP;
+    INSERT INTO shared_favorite_members (group_id, user_id)
+    VALUES (gid, partner)
+    ON CONFLICT (group_id, user_id) DO NOTHING;
+  END IF;
+
+  INSERT INTO shared_favorite_members (group_id, user_id)
+  VALUES (gid, me)
+  ON CONFLICT (group_id, user_id) DO NOTHING;
+  RETURN jsonb_build_object('success', true, 'code', 'JOINED', 'message', 'Accounts linked successfully.', 'group_id', gid);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.validate_and_join_duo(TEXT) TO authenticated;
+
+-- Single source of truth: the legacy uuid-returning RPC now delegates.
+CREATE OR REPLACE FUNCTION public.join_or_create_duo_group(partner_invite_code TEXT)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  r jsonb;
+BEGIN
+  r := public.validate_and_join_duo(partner_invite_code);
+  IF NOT COALESCE((r->>'success')::boolean, false) THEN
+    RAISE EXCEPTION '%', COALESCE(r->>'code', 'INVALID_CODE');
+  END IF;
+  RETURN (r->>'group_id')::uuid;
+END;
+$$;

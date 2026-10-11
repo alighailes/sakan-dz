@@ -6,19 +6,16 @@ import type { UserProfile, UserType, UserRole } from '@/types'
 
 // ============================================================
 // Mock Mode Password Hashing
-// Simple hash function for mock mode only (NOT cryptographically secure).
+// Uses Web Crypto API (SHA-256) for secure hashing even in mock mode.
 // In production, Supabase Auth handles password hashing with bcrypt.
 // This prevents plaintext passwords from being stored in localStorage.
 // ============================================================
-function mockHashPassword(password: string): string {
-  let hash = 0
-  const salted = `sakan-dz-mock-salt:${password}`
-  for (let i = 0; i < salted.length; i++) {
-    const char = salted.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
-    hash = hash & hash // Convert to 32-bit integer
-  }
-  return `mockhash_${Math.abs(hash).toString(16)}`
+async function mockHashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(`sakan-dz-mock-salt:${password}`)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return 'mockhash_' + hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
 // ============================================================
@@ -355,10 +352,11 @@ export const useAuthStore = create<AuthState>()(
             throw new Error('auth.emailExists')
           }
 
+          const hashedPassword = await mockHashPassword(password)
           const newUser: MockUser = {
             id: crypto.randomUUID(),
             email,
-            password: mockHashPassword(password),
+            password: hashedPassword,
             profile: {
               id: crypto.randomUUID(),
               full_name: metadata.full_name,
@@ -425,7 +423,8 @@ export const useAuthStore = create<AuthState>()(
           await new Promise((resolve) => setTimeout(resolve, 800))
 
           const users = getMockUsers()
-          const found = users.find((u) => u.email === email && u.password === mockHashPassword(password))
+          const hashedPassword = await mockHashPassword(password)
+          const found = users.find((u) => u.email === email && u.password === hashedPassword)
 
           if (!found) {
             set({ loading: false, error: 'auth.invalidCredentials' })

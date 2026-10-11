@@ -8,15 +8,17 @@ import { buildDuoLink, type SharedGroup } from '@/services/collaborativeFavorite
 interface DarnaDuoHeaderProps {
   group: SharedGroup | null
   currentUserId: string | null
+  ownInviteCode?: string | null
   loading: boolean
   joinError: string | null
   onCreate: () => void
-  onJoin: (code: string) => void
+  onJoin: (code: string) => Promise<boolean>
 }
 
 export function DarnaDuoHeader({
   group,
   currentUserId,
+  ownInviteCode,
   loading,
   joinError,
   onCreate,
@@ -26,10 +28,36 @@ export function DarnaDuoHeader({
   const [modalOpen, setModalOpen] = useState(false)
   const [code, setCode] = useState('')
   const [copied, setCopied] = useState(false)
+  const [localError, setLocalError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
   const partner = group?.members.find((m) => m.userId !== currentUserId) ?? null
   const inviteLink = group ? buildDuoLink(group.inviteCode) : ''
+
+  const handleJoin = async () => {
+    const clean = code.trim().toUpperCase()
+    if (!clean) return
+    setLocalError(null)
+    const own = ownInviteCode?.trim().toUpperCase()
+    if (own && clean === own) {
+      setLocalError(
+        locale === 'ar'
+          ? 'لا يمكنك استخدام رمز الدعوة الخاص بك'
+          : 'Vous ne pouvez pas utiliser votre propre code d’invitation'
+      )
+      return
+    }
+    const ok = await onJoin(clean)
+    if (ok) {
+      // Success — toast, clear the input, and the parent refreshes the
+      // group, which flips this header to "متصل مع [اسم الشريك]".
+      showToast(locale === 'ar' ? 'تم ربط الحسابين بنجاح' : 'Comptes liés avec succès !')
+      setCode('')
+      setLocalError(null)
+    }
+  }
+
+  const displayedError = localError ?? joinError
 
   const showToast = (message: string) => {
     setToast(message)
@@ -101,17 +129,22 @@ export function DarnaDuoHeader({
       <div className="mt-3 flex gap-2">
         <Input
           value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          onChange={(e) => {
+            setCode(e.target.value.toUpperCase())
+            setLocalError(null)
+          }}
           placeholder={locale === 'ar' ? 'أدخل رمز الدعوة…' : 'Code d’invitation…'}
           maxLength={12}
           className="font-mono tracking-widest"
         />
-        <Button variant="outline" size="sm" className="shrink-0 gap-1.5" disabled={!code.trim()} onClick={() => onJoin(code.trim().toUpperCase())}>
+        <Button variant="outline" size="sm" className="shrink-0 gap-1.5" disabled={!code.trim()} onClick={handleJoin}>
           <UserPlus className="h-4 w-4" />
           {locale === 'ar' ? 'انضم' : 'Rejoindre'}
         </Button>
       </div>
-      {joinError && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{joinError}</p>}
+      {displayedError && (
+        <p className="mt-2 text-sm text-red-600 dark:text-red-400">{displayedError}</p>
+      )}
 
       {/* Invite modal */}
       {modalOpen && group && (

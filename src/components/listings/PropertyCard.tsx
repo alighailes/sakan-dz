@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom'
-import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { Heart, BedDouble, Bath, MapPin, Eye, MessageCircle, Users, Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,7 +18,12 @@ import { LegalStatusBadge } from '@/components/listings/LegalStatusBadge'
 import { calculatePriceBenchmark } from '@/lib/priceBenchmark'
 import { useProperties } from '@/hooks/useProperties'
 import { useAuthStore } from '@/stores/authStore'
-import { fetchUserGroup, toggleSharedProperty } from '@/services/collaborativeFavoritesApi'
+import {
+  createGroup,
+  fetchUserGroup,
+  getLastDuoGroupError,
+  toggleDuoProperty,
+} from '@/services/collaborativeFavoritesApi'
 import type { Property } from '@/types'
 
 interface PropertyCardProps {
@@ -36,8 +41,10 @@ export function PropertyCard({ property, showDuoAction = true, duoAdded, onDuoTo
   const { toggleFavorite, isFavorite } = useFavoritesStore()
   const { user } = useAuthStore()
   const { mode } = useCurrencyStore()
+  const navigate = useNavigate()
   const [duoLoading, setDuoLoading] = useState(false)
   const [duoDone, setDuoDone] = useState(false)
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const fav = isFavorite(property.id)
   const wilaya = WILAYAS.find((w) => w.id === property.wilayaId)
   const { properties: allProperties } = useProperties(undefined, { limit: 60 })
@@ -51,6 +58,14 @@ export function PropertyCard({ property, showDuoAction = true, duoAdded, onDuoTo
     : getAlternativePrice(property.price, property.currency, mode, locale)
 
   const benchmark = calculatePriceBenchmark(property, allProperties)
+
+  useEffect(() => {
+    if (!toast) return
+    const id = window.setTimeout(() => setToast(null), 3200)
+    return () => window.clearTimeout(id)
+  }, [toast])
+
+  const showToast = (type: 'success' | 'error', message: string) => setToast({ type, message })
 
   const handleWhatsApp = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -66,6 +81,90 @@ export function PropertyCard({ property, showDuoAction = true, duoAdded, onDuoTo
         : `Bonjour, je suis intéressé par votre bien: ${property.title}`
     )
     window.open(`https://wa.me/${phone}?text=${message}`, '_blank')
+  }
+
+  const handleDuoToggle = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (duoLoading) return
+
+    // Controlled (e.g. the Duo tab) — delegate to the parent.
+    if (onDuoToggle) {
+      setDuoLoading(true)
+      try {
+        await onDuoToggle(property.id)
+      } catch (err) {
+        console.error('[PropertyCard] duo toggle failed:', err)
+        showToast('error', err instanceof Error ? err.message : String(err))
+      } finally {
+        setDuoLoading(false)
+      }
+      return
+    }
+
+    if (!user) {
+      showToast(
+        'error',
+        locale === 'ar' ? 'يرجى تسجيل الدخول أولاً' : 'Veuillez vous connecter d’abord'
+      )
+      navigate('/auth')
+      return
+    }
+
+    setDuoLoading(true)
+    try {
+      // Guarantee an active group before touching shared_favorite_items.
+      let group = await fetchUserGroup()
+      if (!group) group = await createGroup()
+
+      if (!group?.id) {
+        // Group could not be provisioned — keep the card clean (no red
+        // banner); the underlying cause goes to the console only.
+        console.error(
+          '[PropertyCard] duo group unavailable:',
+          getLastDuoGroupError() ?? 'group-unavailable'
+        )
+        return
+      }
+
+      const result = await toggleDuoProperty(property.id, group.id)
+      if (result.status === 'added') {
+        setDuoDone(true)
+        showToast(
+          'success',
+          locale === 'ar'
+            ? 'تمت الإضافة إلى مفضلة الشريك (Darna Duo)'
+            : 'Bien ajouté aux favoris partagés Darna Duo'
+        )
+      } else if (result.status === 'removed') {
+        setDuoDone(false)
+        showToast(
+          'success',
+          locale === 'ar'
+            ? 'تمت الإزالة من المفضلة المشتركة'
+            : 'Bien retiré des favoris partagés'
+        )
+      } else if (result.status === 'no_auth') {
+        showToast(
+          'error',
+          locale === 'ar' ? 'يرجى تسجيل الدخول أولاً' : 'Veuillez vous connecter d’abord'
+        )
+        navigate('/auth')
+      } else {
+        // Confirmed write failure — surface the exact error message.
+        console.error('[PropertyCard] duo toggle error:', result.error)
+        showToast(
+          'error',
+          result.error ||
+            (locale === 'ar' ? 'تعذّر تحديث المفضلة المشتركة' : 'Échec de la mise à jour')
+        )
+      }
+    } catch (err) {
+      console.error('[PropertyCard] duo toggle failed:', err)
+      showToast('error', err instanceof Error ? err.message : String(err))
+    } finally {
+      setDuoLoading(false)
+    }
   }
 
   return (
@@ -109,27 +208,10 @@ export function PropertyCard({ property, showDuoAction = true, duoAdded, onDuoTo
         </button>
 
         {/* Duo Favorite / Partner button */}
-        {showDuoAction && user && (
+        {showDuoAction && (
           <button
-            onClick={async (e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              if (onDuoToggle) {
-                await onDuoToggle(property.id)
-              } else {
-                setDuoLoading(true)
-                try {
-                  const group = await fetchUserGroup()
-                  if (group) {
-                    await toggleSharedProperty(group.id, property.id, {})
-                    setDuoDone(true)
-                  }
-                } catch {
-                } finally {
-                  setDuoLoading(false)
-                }
-              }
-            }}
+            type="button"
+            onClick={handleDuoToggle}
             className={cn(
               'absolute right-3 top-14 flex h-9 w-9 items-center justify-center rounded-full backdrop-blur-md transition-all duration-200 active:scale-90',
               duoAdded || duoDone
@@ -139,9 +221,30 @@ export function PropertyCard({ property, showDuoAction = true, duoAdded, onDuoTo
             disabled={duoLoading}
             title={locale === 'ar' ? 'إضافة إلى Darna Duo' : 'Ajouter à Darna Duo'}
           >
-            <Users className={cn('h-4 w-4 transition-transform duration-200', (duoAdded || duoDone) && 'scale-110')} />
-            {duoLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+            {duoLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Users
+                className={cn(
+                  'h-4 w-4 transition-transform duration-200',
+                  (duoAdded || duoDone) && 'scale-110'
+                )}
+              />
+            )}
           </button>
+        )}
+
+        {/* Per-card toast (absolute: backdrop-blur ancestors break fixed positioning) */}
+        {toast && (
+          <div
+            role="status"
+            className={cn(
+              'pointer-events-none absolute inset-x-3 top-1/2 z-20 -translate-y-1/2 rounded-xl px-3 py-2 text-center text-xs font-semibold text-white shadow-lg',
+              toast.type === 'success' ? 'bg-emerald-600/95' : 'bg-rose-600/95'
+            )}
+          >
+            {toast.message}
+          </div>
         )}
 
         {/* Price pill - bottom of image */}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import {
   ArrowLeftRight,
@@ -7,10 +7,12 @@ import {
   Building2,
   Camera,
   Check,
+  Copy,
   Heart,
   Loader2,
   LogOut,
   MessageSquare,
+  Users,
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -30,6 +32,7 @@ import {
   subscribeToPush,
   unsubscribeFromPush,
 } from '@/services/notifications'
+import { getMyGroup } from '@/services/collaborativeFavoritesApi'
 import { cn } from '@/lib/utils'
 
 const MAX_AVATAR_BYTES = 3 * 1024 * 1024
@@ -89,6 +92,12 @@ export function ProfilePage() {
   const [pushBusy, setPushBusy] = useState(false)
   const [confirmSignOut, setConfirmSignOut] = useState(false)
 
+  // Darna Duo invite code. Sourced from profile.invite_code when present,
+  // otherwise silently resolved from the Darna Duo (shared favorites) group.
+  const [inviteCode, setInviteCode] = useState<string | null>(null)
+  const [inviteLoading, setInviteLoading] = useState(false)
+  const [inviteCopied, setInviteCopied] = useState(false)
+
   const fileRef = useRef<HTMLInputElement>(null)
 
   // Sync form from store profile + per-user extras.
@@ -120,6 +129,35 @@ export function ProfilePage() {
     }
   }, [])
 
+  // Resolve the Darna Duo invite code: prefer profile.invite_code, and fall
+  // back to a silent fetch of the user's shared-favorites group (where the
+  // code actually lives) so the card never stays empty.
+  const resolveInviteCode = useCallback(async () => {
+    const fromProfile = profile?.invite_code?.trim()
+    if (fromProfile) {
+      setInviteCode(fromProfile)
+      setInviteLoading(false)
+      return
+    }
+    setInviteLoading(true)
+    try {
+      const group = await getMyGroup()
+      setInviteCode(group?.inviteCode?.trim() || null)
+    } catch {
+      setInviteCode(null)
+    } finally {
+      setInviteLoading(false)
+    }
+  }, [profile?.invite_code])
+
+  useEffect(() => {
+    if (!user) {
+      setInviteCode(null)
+      return
+    }
+    void resolveInviteCode()
+  }, [user, resolveInviteCode])
+
   // Auto-dismiss toast.
   useEffect(() => {
     if (!toast) return
@@ -150,6 +188,18 @@ export function ProfilePage() {
   }))
 
   const showToast = (type: 'success' | 'error', message: string) => setToast({ type, message })
+
+  const handleCopyInviteCode = async () => {
+    if (!inviteCode) return
+    try {
+      await navigator.clipboard.writeText(inviteCode)
+      setInviteCopied(true)
+      window.setTimeout(() => setInviteCopied(false), 2000)
+      showToast('success', locale === 'ar' ? 'تم نسخ الرمز!' : 'Code copié !')
+    } catch {
+      showToast('error', locale === 'ar' ? 'تعذّر النسخ، حاول مجدداً' : 'Copy failed, try again')
+    }
+  }
 
   const handleAvatarClick = () => {
     if (avatarBusy) return
@@ -460,6 +510,69 @@ export function ProfilePage() {
               ? 'باحث عن سكن'
               : 'Buyer'}
         </span>
+      </div>
+
+      {/* Darna Duo invite code */}
+      <div className="mt-4 overflow-hidden rounded-2xl border border-white/50 bg-white/60 p-5 shadow-sm backdrop-blur-xl dark:border-white/5 dark:bg-[#162623]/45">
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary-600/10 dark:bg-primary-900/30">
+            <Users className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-base font-bold text-zinc-900 dark:text-white">
+              {locale === 'ar' ? 'Darna Duo — رمز الدعوة' : 'Darna Duo — code d’invitation'}
+            </h2>
+            <p className="mt-0.5 text-xs text-zinc-400">
+              {locale === 'ar'
+                ? 'شارك هذا الرمز مع شريكك لربط حسابيكما في مساحة المفضلة المشتركة (Darna Duo).'
+                : 'Partagez ce code avec votre partenaire pour lier vos comptes dans les favoris partagés (Darna Duo).'}
+            </p>
+
+            {inviteLoading && !inviteCode ? (
+              <div className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-zinc-100/70 px-4 py-3 dark:bg-zinc-800/60">
+                <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />
+                <span className="text-sm text-zinc-500 dark:text-zinc-400">
+                  {locale === 'ar' ? 'جارٍ تحضير رمز الدعوة…' : 'Préparation du code…'}
+                </span>
+              </div>
+            ) : inviteCode ? (
+              <div className="mt-3 flex items-center gap-2 rounded-xl border border-zinc-200/70 bg-zinc-100/70 py-2 ps-4 pe-1.5 dark:border-zinc-700/60 dark:bg-zinc-800/60">
+                <span className="min-w-0 flex-1 truncate font-mono text-base font-bold tracking-widest text-primary-500 sm:text-lg dark:text-primary-300">
+                  {inviteCode}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void handleCopyInviteCode()}
+                  aria-label={locale === 'ar' ? 'نسخ الرمز' : 'Copier le code'}
+                  title={locale === 'ar' ? 'نسخ الرمز' : 'Copier le code'}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-white hover:text-primary-600 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-primary-300"
+                >
+                  {inviteCopied ? (
+                    <Check className="h-4 w-4 text-emerald-500" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            ) : (
+              <div className="mt-3 rounded-xl border border-dashed border-zinc-300 px-4 py-3 text-center dark:border-zinc-700">
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                  {locale === 'ar' ? 'رمز الدعوة غير متاح حالياً' : 'Code d’invitation indisponible'}
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="mt-1"
+                  disabled={inviteLoading}
+                  onClick={() => void resolveInviteCode()}
+                >
+                  {locale === 'ar' ? 'إعادة المحاولة' : 'Réessayer'}
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Personal info form */}

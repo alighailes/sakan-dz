@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { useLocale } from '@/i18n'
 import { WILAYAS_58, getWilayaByCode, getCommunesByWilaya, wilayaLabel, communeLabel, communeValue } from '@/data/algeria-locations'
-import { useAuth } from '../contexts/AuthContext'
 import { useAuthStore } from '@/stores/authStore'
 import { uploadPropertyImages } from '../services/storage'
 import { invalidatePropertiesCache } from '@/services/api'
@@ -65,8 +64,7 @@ function formatPublishError(err: unknown): string {
 export function PublishPage() {
   const navigate = useNavigate()
   const { locale, t } = useLocale()
-  const { user, profile: authProfile, loading: authLoading } = useAuth()
-  const storeProfile = useAuthStore((s) => s.profile)
+  const { user, profile, loading: authLoading } = useAuthStore()
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -96,18 +94,13 @@ export function PublishPage() {
   const [longitude, setLongitude] = useState<number | null>(null)
 
   // Auto-fill phone from the logged-in user's profiles.phone_number.
-  // Store profile first (handles mock mode), then context profile, then a
-  // direct profiles lookup as a last resort. Never overwrites manual edits.
+  // Store profile first (handles mock mode), then a direct profiles lookup as a last resort.
+  // Never overwrites manual edits.
   useEffect(() => {
     if (phoneTouched || phone) return
-    const fromStore = storeProfile?.phone_number?.trim()
-    const fromCtx = (authProfile as { phone_number?: string } | null)?.phone_number?.trim()
+    const fromStore = profile?.phone_number?.trim()
     if (fromStore) {
       setPhone(fromStore)
-      return
-    }
-    if (fromCtx) {
-      setPhone(fromCtx)
       return
     }
     if (!user) return
@@ -129,7 +122,7 @@ export function PublishPage() {
     return () => {
       cancelled = true
     }
-  }, [phoneTouched, phone, storeProfile, authProfile, user])
+  }, [phoneTouched, phone, profile, user])
 
   if (authLoading) {
     return (
@@ -276,45 +269,76 @@ export function PublishPage() {
       }
 
       // 2. Insert the listing into public.properties.
-      // Wilaya / commune are stored by their canonical French names so that
-      // listings stay standardized no matter which UI locale was used.
-      // NOTE: the table's area column is named `surface` — sending `area`
-      // would fail PostgREST schema validation (PGRST204), so only `surface`
-      // is sent.
+      // Map form fields to exact schema columns with proper enum values.
       // Geolocation: Leaflet + PostGIS canonical order is
       // latitude (North, 18..38) / longitude (East, -9..12).
       // The interactive pin picker guarantees `latitude`/`longitude` are set
       // and already normalized (inverted [lng, lat] pairs auto-swapped).
-      const wilayaName = getWilayaByCode(wilayaCode)?.name_fr ?? ''
       const coords = normalizeLatLng(latitude, longitude)
       const cleanPhone = sanitizePhone(phone)
+
+      // Map legal status from UI values to DB enum values
+      const legalStatusMap: Record<string, string> = {
+        'acte_livret': 'acte_notaire',
+        'acte_seul': 'acte_notaire',
+        'indivision': 'indivision',
+        'decision_attribution': 'decision',
+        'cle_desistement': 'papier_timbre',
+        'promesse_vente': 'papier_timbre',
+        'papier_timbre': 'papier_timbre',
+      }
+      const dbLegalStatus = legalStatusMap[legalStatus] ?? 'acte_notaire'
+
+      // Map water availability
+      const waterAvailability = hasWaterTank ? 'tank_bache' : '24_7'
+
+      // Map gas type (central heating → city gas)
+      const gasType = hasCentralHeating ? 'city_gas' : 'none'
+
+      // Electricity meter - default to individual
+      const electricityMeter = 'individual'
+
       const { error } = await supabase.from('properties').insert({
         title: sanitizeText(title),
         description: sanitizeText(description),
         price: Number(price),
-        operation,
         operation_type: operation,
         property_type: propertyType,
-        legal_status: legalStatus,
-        wilaya: wilayaName,
-        wilaya_id: typeof wilayaCode === 'number' ? wilayaCode : null,        commune: sanitizeText(commune),
-        surface: Number(surface),
-        rooms: Number(rooms),
+        legal_status: dbLegalStatus,
+        wilaya_id: typeof wilayaCode === 'number' ? wilayaCode : null,
+        commune: sanitizeText(commune),
+        address: sanitizeText(commune), // Using commune as address fallback
+        area: Number(surface),
         bedrooms: Number(rooms),
         bathrooms: Number(bathrooms),
-        latitude: coords ? coords.lat : latitude,
-        longitude: coords ? coords.lng : longitude,
+        latitude: coords ? coords.lat : latitude!,
+        longitude: coords ? coords.lng : longitude!,
         has_elevator: hasElevator,
-        has_water_tank: hasWaterTank,
-        has_central_heating: hasCentralHeating,
-        has_garage: hasGarage,
+        water_availability: waterAvailability,
+        gas_type: gasType,
+        electricity_meter: electricityMeter,
+        floor_number: undefined,
+        building_floors: undefined,
         images,
-        user_id: user.id,
         owner_id: user.id,
-        owner_name: user.email ?? '',
-        // Actual column is owner_phone (TEXT, nullable) — task's
-        // `properties.phone` maps here.
+        owner_name: profile?.full_name ?? user.email ?? '',
         owner_phone: cleanPhone || null,
+        is_available: true,
+        is_verified: false,
+        is_featured: false,
+        // Colocation defaults
+        colocation_gender: operation === 'colocation' ? 'any' : null,
+        student_friendly: false,
+        roommates_count: null,
+        available_beds: null,
+        smoking_allowed: false,
+        wifi_included: true,
+        // Vacation defaults
+        cleaning_fee: operation === 'vacation' ? 0 : null,
+        booked_dates: [],
+        // Agency defaults
+        agency_id: profile?.user_type === 'agency' ? user.id : null,
+        agency_name: profile?.user_type === 'agency' ? profile.agency_name : null,
       })
 
       if (error) throw error

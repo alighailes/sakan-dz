@@ -98,6 +98,8 @@ export interface UserProfile {
   /** UI mode chosen during onboarding (buyer/seller). Distinct from user_type. */
   role?: UserRole
   avatar_url?: string
+  /** Darna Duo invite code linking accounts in the shared favorites space. */
+  invite_code?: string
   created_at: string
   updated_at: string
 }

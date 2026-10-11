@@ -72,6 +72,26 @@ function randomInviteCode(length = 6): string {
   return code
 }
 
+/**
+ * UUID v4 built on crypto.getRandomValues. Unlike crypto.randomUUID(),
+ * this works in non-secure contexts (e.g. a LAN http:// origin), where
+ * randomUUID is undefined and would otherwise throw.
+ */
+function randomUuid(): string {
+  const b = new Uint8Array(16)
+  crypto.getRandomValues(b)
+  b[6] = (b[6] & 0x0f) | 0x40
+  b[8] = (b[8] & 0x3f) | 0x80
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, '0'))
+  return (
+    h.slice(0, 4).join('') +
+    '-' + h.slice(4, 6).join('') +
+    '-' + h.slice(6, 8).join('') +
+    '-' + h.slice(8, 10).join('') +
+    '-' + h.slice(10, 16).join('')
+  )
+}
+
 /** Shareable link to join a group: `/favorites?join=CODE`. */
 export function buildJoinLink(code: string): string {
   const path = `/favorites?join=${encodeURIComponent(code)}`
@@ -132,12 +152,7 @@ async function loadGroupWithMembers(groupId: string): Promise<SharedGroup | null
     .single()
   if (groupError || !group) return null
 
-  const { data: memberRows } = await supabase
-    .from('shared_favorite_members')
-    .select('user_id, display_name, avatar_url')
-    .eq('group_id', groupId)
-
-  const rows = ((memberRows ?? []) as unknown as Record<string, unknown>[])
+  const rows = await fetchMemberRows(groupId)
   const names = new Map<string, string>()
   await Promise.all(
     rows.map(async (r) => {
@@ -157,6 +172,71 @@ async function loadGroupWithMembers(groupId: string): Promise<SharedGroup | null
     createdBy,
     members: mapMembers(rows, names, createdBy),
   }
+}
+
+/** Last underlying Supabase error from group provisioning (for diagnostics). */
+let lastGroupProvisionError: string | null = null
+
+/**
+ * Tracks whether the deployed `shared_favorite_members` table has the newer
+ * `display_name` / `avatar_url` columns. Older deployments lack them and
+ * PostgREST aborts whole queries that reference a missing column, so we probe
+ * once and cache the result to avoid repeated "schema cache" errors.
+ */
+type MembersSchema = 'unknown' | 'full' | 'minimal'
+let membersSchema: MembersSchema = 'unknown'
+
+/** Read member rows, degrading to a minimal column set if the DB is older. */
+async function fetchMemberRows(
+  groupId: string
+): Promise<Record<string, unknown>[]> {
+  if (membersSchema === 'full') {
+    const { data, error } = await supabase
+      .from('shared_favorite_members')
+      .select('user_id, display_name, avatar_url')
+      .eq('group_id', groupId)
+    if (!error) return (data ?? []) as unknown as Record<string, unknown>[]
+    membersSchema = 'minimal'
+  }
+  const { data, error } = await supabase
+    .from('shared_favorite_members')
+    .select('user_id')
+    .eq('group_id', groupId)
+  if (error) return []
+  membersSchema = 'minimal'
+  return (data ?? []) as unknown as Record<string, unknown>[]
+}
+
+/** Insert a member row, retrying without `display_name` on older tables. */
+async function insertMember(groupId: string, userId: string): Promise<boolean> {
+  if (membersSchema !== 'minimal') {
+    const displayName = await getDisplayName(userId)
+    const { error } = await supabase
+      .from('shared_favorite_members')
+      .insert({ group_id: groupId, user_id: userId, display_name: displayName })
+    if (!error) {
+      membersSchema = 'full'
+      return true
+    }
+    if (error) {
+      lastGroupProvisionError = error.message
+      console.error(
+        '[collaborativeFavoritesApi] member insert with display_name failed, retrying without it — ' +
+          'run: ALTER TABLE shared_favorite_members ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT \'\';',
+        error
+      )
+    }
+    membersSchema = 'minimal'
+  }
+  const { error } = await supabase
+    .from('shared_favorite_members')
+    .insert({ group_id: groupId, user_id: userId })
+  if (error) {
+    lastGroupProvisionError = error.message
+    console.error('[collaborativeFavoritesApi] member insert (minimal) failed:', error)
+    return false
+  }
+  return true
 }
 
 /**
@@ -183,55 +263,220 @@ export async function fetchUserGroup(): Promise<SharedGroup | null> {
     }
 
     // No group yet — create one and add the caller as first member.
-    const { data: created, error: createError } = await supabase
+    // The group id is generated client-side on purpose: INSERT ... RETURNING
+    // would be filtered out by the SELECT policy (the caller is not a member
+    // of the row until the membership insert runs), so the returned row would
+    // be empty and creation would appear to fail.
+    const newGroupId = randomUuid()
+    const inviteCode = randomInviteCode()
+    const { error: createError } = await supabase
       .from('shared_favorite_groups')
-      .insert({ created_by: userId, invite_code: randomInviteCode() })
-      .select('id, invite_code')
-      .single()
-    if (createError || !created) return null
-    const c = created as unknown as Record<string, unknown>
-    const newGroupId = String(c.id ?? '')
-    if (!newGroupId) return null
+      .insert({ id: newGroupId, created_by: userId, invite_code: inviteCode })
+    if (createError) {
+      lastGroupProvisionError = createError.message
+      console.error('[collaborativeFavoritesApi] createGroup insert failed:', createError)
+      return null
+    }
 
     const displayName = await getDisplayName(userId)
-    await supabase
-      .from('shared_favorite_members')
-      .insert({ group_id: newGroupId, user_id: userId, display_name: displayName })
+    const added = await insertMember(newGroupId, userId)
+    if (!added) return null
 
-    return loadGroupWithMembers(newGroupId)
+    // Return the group we just built instead of re-reading it — the SELECT
+    // policies hide rows until membership becomes visible, so a follow-up
+    // read can return null even though the writes succeeded.
+    return {
+      id: newGroupId,
+      inviteCode,
+      createdBy: userId,
+      members: [{ userId, displayName, avatarUrl: null, role: 'owner' }],
+    }
+  } catch (err) {
+    lastGroupProvisionError = err instanceof Error ? err.message : String(err)
+    return null
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Personal invite codes — join by linking two user accounts.           */
+/* ------------------------------------------------------------------ */
+
+export type DuoJoinStatus = 'joined' | 'not_found' | 'own_code'
+
+export interface DuoJoinResult {
+  status: DuoJoinStatus
+  group: SharedGroup | null
+  /** Exact server message (RPC) when present — shown verbatim in the UI. */
+  message?: string | null
+}
+
+async function findGroupIdByInviteCode(clean: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('shared_favorite_groups')
+    .select('id')
+    .eq('invite_code', clean)
+    .single()
+  if (error || !data) return null
+  return String((data as unknown as Record<string, unknown>).id ?? '') || null
+}
+
+async function findUserIdByProfileInviteCode(clean: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('invite_code', clean)
+      .single()
+    if (error || !data) return null
+    return String((data as unknown as Record<string, unknown>).id ?? '') || null
   } catch {
     return null
   }
 }
 
-/** Join an existing shared group via its invite code. Idempotent. */
-export async function joinGroupByCode(code: string): Promise<SharedGroup | null> {
-  try {
-    const userId = await getCurrentUserId()
-    const clean = code.trim().toUpperCase()
-    if (!userId || !clean) return null
+async function findUserGroupId(userId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('shared_favorite_members')
+    .select('group_id')
+    .eq('user_id', userId)
+    .order('joined_at', { ascending: false })
+    .limit(1)
+    .single()
+  const groupId = (data as { group_id?: unknown } | null)?.group_id
+  return typeof groupId === 'string' && groupId ? groupId : null
+}
 
-    const { data: group, error } = await supabase
-      .from('shared_favorite_groups')
-      .select('id')
-      .eq('invite_code', clean)
-      .single()
-    if (error || !group) return null
-    const groupId = String((group as unknown as Record<string, unknown>).id ?? '')
-    if (!groupId) return null
-
+async function addMemberToGroup(groupId: string, userId: string): Promise<void> {
+  if (membersSchema !== 'minimal') {
     const displayName = await getDisplayName(userId)
-    // Idempotent: ignore duplicate-membership errors.
-    await supabase
+    const { error } = await supabase
       .from('shared_favorite_members')
       .upsert(
         { group_id: groupId, user_id: userId, display_name: displayName },
         { onConflict: 'group_id,user_id' }
       )
+    if (!error) {
+      membersSchema = 'full'
+      return
+    }
+    console.error(
+      '[collaborativeFavoritesApi] member upsert with display_name failed, retrying without it:',
+      error
+    )
+    membersSchema = 'minimal'
+  }
+  await supabase
+    .from('shared_favorite_members')
+    .upsert({ group_id: groupId, user_id: userId }, { onConflict: 'group_id,user_id' })
+}
 
-    return loadGroupWithMembers(groupId)
+async function createGroupForOwner(ownerId: string): Promise<string | null> {
+  // Client-generated id + no RETURNING: the SELECT policy on
+  // shared_favorite_groups only reveals rows to members, and the owner is not
+  // a member yet at insert time, so `.select()` would yield no row.
+  const groupId = randomUuid()
+  const { error } = await supabase
+    .from('shared_favorite_groups')
+    .insert({ id: groupId, created_by: ownerId, invite_code: randomInviteCode() })
+  if (error) return null
+  return groupId
+}
+
+/**
+ * Join a shared group using either a group invite code
+ * (`shared_favorite_groups.invite_code`) or a user's personal invite code
+ * (`profiles.invite_code`). A personal code links the two accounts: it
+ * reuses the partner's existing group, or creates a fresh one for both.
+ *
+ * Preferred path is the `validate_and_join_duo` RPC: client-side lookups
+ * of groups/profiles by code are RLS-blocked for strangers, which used to
+ * surface valid codes as "not_found". Keeps the DuoJoinResult status
+ * contract (callers map statuses to localized strings and do not catch),
+ * with the exact RPC message plumbed through `message` when present.
+ */
+export async function joinGroupByCode(code: string): Promise<DuoJoinResult> {
+  const clean = code.trim().toUpperCase()
+  try {
+    const userId = await getCurrentUserId()
+    if (!userId || !clean) return { status: 'not_found', group: null }
+
+    const { data, error } = await supabase.rpc('validate_and_join_duo', {
+      invite_code_input: clean,
+    })
+    if (error) {
+      console.error('[validate_and_join_duo] RPC error:', error)
+      const rpcErr = error as unknown as Record<string, unknown>
+      const rpcMsg = String(rpcErr.message ?? '')
+      if (rpcMsg.includes('SELF_CODE')) {
+        return { status: 'own_code', group: null, message: rpcMsg }
+      }
+      if (
+        rpcErr.code === 'PGRST202' ||
+        rpcErr.status === 404 ||
+        rpcMsg.includes('validate_and_join_duo') ||
+        rpcMsg.includes('does not exist')
+      ) {
+        // RPC not migrated yet — legacy client-side path.
+        return legacyJoinGroupByCode(clean, userId)
+      }
+      return { status: 'not_found', group: null, message: rpcMsg || null }
+    }
+
+    const res = (data ?? {}) as unknown as Record<string, unknown>
+    const ok = res.success === true
+    const resCode = String(res.code ?? '')
+    const resMsg = typeof res.message === 'string' && res.message ? res.message : null
+    if (!ok) {
+      if (resCode.includes('SELF_CODE')) {
+        return { status: 'own_code', group: null, message: resMsg }
+      }
+      return { status: 'not_found', group: null, message: resMsg }
+    }
+    const gid = String(res.group_id ?? '')
+    if (!gid) return { status: 'not_found', group: null }
+    // Refresh the active session: the joined group is the newest membership.
+    const group =
+      (await loadGroupWithMembers(gid)) ?? (await fetchUserGroup())
+    // Reads still RLS-blocked (migration partially applied): the join
+    // itself succeeded server-side; the caller refreshes the cache.
+    return { status: 'joined', group: group?.id === gid ? group : null }
   } catch {
-    return null
+    return { status: 'not_found', group: null }
+  }
+}
+
+/** Pre-RPC join path (kept as fallback until the RPC is migrated). */
+async function legacyJoinGroupByCode(
+  clean: string,
+  userId: string
+): Promise<DuoJoinResult> {
+  try {
+    // 1) Direct group invite code.
+    const groupIdFromCode = await findGroupIdByInviteCode(clean)
+    if (groupIdFromCode) {
+      await addMemberToGroup(groupIdFromCode, userId)
+      const group = await loadGroupWithMembers(groupIdFromCode)
+      return group ? { status: 'joined', group } : { status: 'not_found', group: null }
+    }
+
+    // 2) Personal invite code -> resolve the owner's profile.
+    const partnerId = await findUserIdByProfileInviteCode(clean)
+    if (!partnerId) return { status: 'not_found', group: null }
+    if (partnerId === userId) return { status: 'own_code', group: null }
+
+    // Reuse the partner's active group, or create one for both accounts.
+    let groupId = await findUserGroupId(partnerId)
+    if (!groupId) {
+      groupId = await createGroupForOwner(partnerId)
+      if (!groupId) return { status: 'not_found', group: null }
+      await addMemberToGroup(groupId, partnerId)
+    }
+    await addMemberToGroup(groupId, userId)
+
+    const group = await loadGroupWithMembers(groupId)
+    return group ? { status: 'joined', group } : { status: 'not_found', group: null }
+  } catch {
+    return { status: 'not_found', group: null }
   }
 }
 
@@ -260,19 +505,33 @@ export async function fetchSharedInteractions(
 ): Promise<SharedPropertyEntry[]> {
   try {
     if (!groupId) return []
-    const { data: items, error } = await supabase
-      .from('shared_favorite_items')
-      .select('property_id, note, reaction, reaction_by, visit_status, visit_at, added_by, updated_at')
-      .eq('group_id', groupId)
-      .order('updated_at', { ascending: false })
-    if (error || !items) return []
+    // Wide projection first; on failure (e.g. a newer column missing on an
+    // older deployment) fall back to a minimal projection so one column
+    // can't silently blank the whole shared list.
+    let items: unknown[] | null = null
+    {
+      const { data, error } = await supabase
+        .from('shared_favorite_items')
+        .select('property_id, note, reaction, reaction_by, visit_status, visit_at, added_by, updated_at')
+        .eq('group_id', groupId)
+        .order('updated_at', { ascending: false })
+      if (!error && data) {
+        items = data as unknown[]
+      } else if (error) {
+        console.error('[collaborativeFavoritesApi] shared items read failed, retrying minimal projection:', error)
+        const retry = await supabase
+          .from('shared_favorite_items')
+          .select('property_id')
+          .eq('group_id', groupId)
+        if (retry.error || !retry.data) return []
+        items = retry.data as unknown[]
+      } else {
+        return []
+      }
+    }
 
-    const { data: memberRows } = await supabase
-      .from('shared_favorite_members')
-      .select('user_id, display_name')
-      .eq('group_id', groupId)
     const names = new Map<string, string>()
-    for (const r of ((memberRows ?? []) as unknown as Record<string, unknown>[])) {
+    for (const r of await fetchMemberRows(groupId)) {
       const uid = String(r.user_id ?? '')
       if (uid) {
         names.set(
@@ -297,16 +556,26 @@ export async function fetchSharedInteractions(
  * visit status. Returns the updated entry, or null on failure.
  */
 export async function toggleSharedProperty(
-  groupId: string,
+  groupId: string | null | undefined,
   propertyId: string,
   patch: SharedPropertyPatch = {}
 ): Promise<SharedPropertyEntry | null> {
   try {
     const userId = await getCurrentUserId()
-    if (!groupId || !propertyId || !userId) return null
+    if (!propertyId || !userId) return null
+
+    // Auto-provision the caller's group when none was passed instead of
+    // failing — a single tap on a listing card must work before a partner
+    // ever joins.
+    let resolvedGroupId = groupId ?? null
+    if (!resolvedGroupId) {
+      const group = (await fetchUserGroup()) ?? (await createGroup())
+      resolvedGroupId = group?.id ?? null
+    }
+    if (!resolvedGroupId) return null
 
     const payload: Record<string, unknown> = {
-      group_id: groupId,
+      group_id: resolvedGroupId,
       property_id: propertyId,
       added_by: userId,
       updated_at: new Date().toISOString(),
@@ -324,9 +593,13 @@ export async function toggleSharedProperty(
       .upsert(payload, { onConflict: 'group_id,property_id' })
       .select('property_id, note, reaction, reaction_by, visit_status, visit_at, added_by, updated_at')
       .single()
-    if (error || !data) return null
+    if (error || !data) {
+      // Never treat as success: the caller only updates UI on non-null.
+      console.error('[SharedFavorites] Write failed:', error ?? 'no data returned')
+      return null
+    }
 
-    const group = await loadGroupWithMembers(groupId)
+    const group = await loadGroupWithMembers(resolvedGroupId)
     const names = new Map<string, string>()
     for (const m of group?.members ?? []) names.set(m.userId, m.displayName)
     return mapEntry(data as unknown as Record<string, unknown>, names)
@@ -406,4 +679,108 @@ export async function fetchGroupProperties(
   groupId: string
 ): Promise<SharedPropertyEntry[]> {
   return fetchSharedInteractions(groupId)
+}
+
+/* ------------------------------------------------------------------ */
+/* Quick toggle from a listing card — auto-provisions the user's group. */
+/* ------------------------------------------------------------------ */
+
+export type DuoToggleStatus = 'added' | 'removed' | 'no_auth' | 'error'
+
+export interface DuoToggleResult {
+  status: DuoToggleStatus
+  groupId?: string | null
+  error?: string
+}
+
+/** Read the last group-provisioning failure for diagnostics. */
+export function getLastDuoGroupError(): string | null {
+  return lastGroupProvisionError
+}
+
+/** Whether the property is in the group and was added by this user. */
+async function isDuoPropertyOwnedByUser(
+  groupId: string,
+  propertyId: string,
+  userId: string
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('shared_favorite_items')
+    .select('property_id')
+    .eq('group_id', groupId)
+    .eq('property_id', propertyId)
+    .eq('added_by', userId)
+    .maybeSingle()
+  if (error) return false
+  return !!data
+}
+
+/**
+ * Toggle a property in the current user's shared (Darna Duo) group.
+ * Auto-provisions a group when the user has none, so a single tap works
+ * even before the partner joins. Inserts/removes using
+ * `(group_id, property_id, added_by = auth.uid())`.
+ */
+export async function toggleDuoProperty(
+  propertyId: string,
+  groupId?: string | null
+): Promise<DuoToggleResult> {
+  try {
+    const userId = await getCurrentUserId()
+    if (!userId) return { status: 'no_auth' }
+    if (!propertyId) return { status: 'error', error: 'missing-property' }
+
+    // Active group. The caller may pass a just-provisioned id; otherwise
+    // create one on the fly — fetchUserGroup already provisions, and
+    // createGroup() is an explicit retry so a single tap works before a
+    // partner ever joins.
+    let resolvedGroupId = groupId ?? null
+    if (!resolvedGroupId) {
+      const group = (await fetchUserGroup()) ?? (await createGroup())
+      resolvedGroupId = group?.id ?? null
+    }
+    if (!resolvedGroupId) {
+      // Never thrown — returned as a status. Keep the underlying cause in the
+      // error field for the console (the card shows only a friendly toast).
+      return { status: 'error', error: lastGroupProvisionError ?? 'group-unavailable' }
+    }
+
+    const owned = await isDuoPropertyOwnedByUser(resolvedGroupId, propertyId, userId)
+    if (owned) {
+      const { error } = await supabase
+        .from('shared_favorite_items')
+        .delete()
+        .eq('group_id', resolvedGroupId)
+        .eq('property_id', propertyId)
+        .eq('added_by', userId)
+      if (error) return { status: 'error', error: error.message, groupId: resolvedGroupId }
+      return { status: 'removed', groupId: resolvedGroupId }
+    }
+
+    const { data: written, error } = await supabase
+      .from('shared_favorite_items')
+      .upsert(
+        {
+          group_id: resolvedGroupId,
+          property_id: propertyId,
+          added_by: userId,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'group_id,property_id' }
+      )
+      .select('property_id')
+      .single()
+    // Verify-after-write: report 'added' only when the row is confirmed.
+    // An upsert with no error but no returned row must not toast success.
+    if (error || !written) {
+      if (error) {
+        console.error('[collaborativeFavoritesApi] insert error:', error)
+        return { status: 'error', error: error.message, groupId: resolvedGroupId }
+      }
+      return { status: 'error', error: 'write-unconfirmed', groupId: resolvedGroupId }
+    }
+    return { status: 'added', groupId: resolvedGroupId }
+  } catch (err) {
+    return { status: 'error', error: err instanceof Error ? err.message : String(err) }
+  }
 }
