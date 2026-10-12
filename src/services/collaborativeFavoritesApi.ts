@@ -240,57 +240,31 @@ async function insertMember(groupId: string, userId: string): Promise<boolean> {
 }
 
 /**
- * Get the current user's active shared group, creating one (with a fresh
- * invite code) when they have none yet. Returns null when logged out or
- * when the shared_* tables are unavailable.
+ * Get the current user's active shared group (pure read — never creates).
+ * Queries `shared_favorite_members` for the current user's `group_id`,
+ * then fetches group details plus all members for that `group_id`.
+ * Returns null cleanly (no throw) when logged out, when the user has no
+ * group yet, or when the shared_* tables are unavailable.
  */
 export async function fetchUserGroup(): Promise<SharedGroup | null> {
   try {
     const userId = await getCurrentUserId()
     if (!userId) return null
 
-    const { data: membership } = await supabase
+    const { data: membership, error: membershipError } = await supabase
       .from('shared_favorite_members')
       .select('group_id')
       .eq('user_id', userId)
       .order('joined_at', { ascending: false })
       .limit(1)
-      .single()
+      .maybeSingle()
+    if (membershipError) return null
     const groupId = (membership as { group_id?: unknown } | null)?.group_id
-    if (typeof groupId === 'string' && groupId) {
-      const existing = await loadGroupWithMembers(groupId)
-      if (existing) return existing
-    }
+    if (typeof groupId !== 'string' || !groupId) return null
 
-    // No group yet — create one and add the caller as first member.
-    // The group id is generated client-side on purpose: INSERT ... RETURNING
-    // would be filtered out by the SELECT policy (the caller is not a member
-    // of the row until the membership insert runs), so the returned row would
-    // be empty and creation would appear to fail.
-    const newGroupId = randomUuid()
-    const inviteCode = randomInviteCode()
-    const { error: createError } = await supabase
-      .from('shared_favorite_groups')
-      .insert({ id: newGroupId, created_by: userId, invite_code: inviteCode })
-    if (createError) {
-      lastGroupProvisionError = createError.message
-      console.error('[collaborativeFavoritesApi] createGroup insert failed:', createError)
-      return null
-    }
-
-    const displayName = await getDisplayName(userId)
-    const added = await insertMember(newGroupId, userId)
-    if (!added) return null
-
-    // Return the group we just built instead of re-reading it — the SELECT
-    // policies hide rows until membership becomes visible, so a follow-up
-    // read can return null even though the writes succeeded.
-    return {
-      id: newGroupId,
-      inviteCode,
-      createdBy: userId,
-      members: [{ userId, displayName, avatarUrl: null, role: 'owner' }],
-    }
+    // Fetch group details + all members for that group_id.
+    const existing = await loadGroupWithMembers(groupId)
+    return existing ?? null
   } catch (err) {
     lastGroupProvisionError = err instanceof Error ? err.message : String(err)
     return null
@@ -315,7 +289,7 @@ async function findGroupIdByInviteCode(clean: string): Promise<string | null> {
     .from('shared_favorite_groups')
     .select('id')
     .eq('invite_code', clean)
-    .single()
+    .maybeSingle()
   if (error || !data) return null
   return String((data as unknown as Record<string, unknown>).id ?? '') || null
 }
@@ -326,7 +300,7 @@ async function findUserIdByProfileInviteCode(clean: string): Promise<string | nu
       .from('profiles')
       .select('id')
       .eq('invite_code', clean)
-      .single()
+      .maybeSingle()
     if (error || !data) return null
     return String((data as unknown as Record<string, unknown>).id ?? '') || null
   } catch {
@@ -341,7 +315,7 @@ async function findUserGroupId(userId: string): Promise<string | null> {
     .eq('user_id', userId)
     .order('joined_at', { ascending: false })
     .limit(1)
-    .single()
+    .maybeSingle()
   const groupId = (data as { group_id?: unknown } | null)?.group_id
   return typeof groupId === 'string' && groupId ? groupId : null
 }
@@ -650,7 +624,99 @@ export async function getMyGroup(): Promise<SharedGroup | null> {
  */
 export async function createGroup(_name?: string): Promise<SharedGroup | null> {
   void _name
-  return fetchUserGroup()
+  try {
+    const userId = await getCurrentUserId()
+    if (!userId) return null
+
+    // Idempotent: reuse the active group when one already exists.
+    const existing = await fetchUserGroup()
+    if (existing) return existing
+
+    // 1. Check existing group created by this user (covers an orphaned group
+    // where the membership row is missing/invisible but the created_by row
+    // exists — otherwise the insert below hits unique_user_single_duo_group).
+    const { data: existingOwnedGroup } = await supabase
+      .from('shared_favorite_groups')
+      .select('id, invite_code, created_by')
+      .eq('created_by', userId)
+      .maybeSingle()
+
+    if (existingOwnedGroup) {
+      const ownedId = String(
+        (existingOwnedGroup as unknown as Record<string, unknown>).id ?? ''
+      )
+      if (ownedId) {
+        // Ensure membership exists
+        await supabase
+          .from('shared_favorite_members')
+          .upsert(
+            { group_id: ownedId, user_id: userId },
+            { onConflict: 'group_id,user_id' }
+          )
+
+        const owned = await loadGroupWithMembers(ownedId)
+        if (owned) return owned
+      }
+    }
+
+    // The group id is generated client-side on purpose: INSERT ... RETURNING
+    // would be filtered out by the SELECT policy (the caller is not a member
+    // of the row until the membership insert runs), so the returned row would
+    // be empty and creation would appear to fail.
+    const newGroupId = randomUuid()
+    const inviteCode = randomInviteCode()
+    const { error: createError } = await supabase
+      .from('shared_favorite_groups')
+      .insert({ id: newGroupId, created_by: userId, invite_code: inviteCode })
+    if (createError) {
+      // Race / orphaned row: the DB enforces one duo group per user via
+      // unique_user_single_duo_group — on 23505 return the existing owned
+      // group instead of surfacing "duo group unavailable".
+      const code = (createError as unknown as Record<string, unknown>)?.code
+      if (code === '23505') {
+        const { data: conflictGroup } = await supabase
+          .from('shared_favorite_groups')
+          .select('id, invite_code, created_by')
+          .eq('created_by', userId)
+          .maybeSingle()
+        const conflictId = String(
+          (conflictGroup as unknown as Record<string, unknown> | null)?.id ?? ''
+        )
+        if (conflictId) {
+          await supabase
+            .from('shared_favorite_members')
+            .upsert(
+              { group_id: conflictId, user_id: userId },
+              { onConflict: 'group_id,user_id' }
+            )
+          const reloadedConflict = await loadGroupWithMembers(conflictId)
+          if (reloadedConflict) return reloadedConflict
+        }
+      }
+      lastGroupProvisionError = createError.message
+      console.error('[collaborativeFavoritesApi] createGroup insert failed:', createError)
+      return null
+    }
+
+    await insertMember(newGroupId, userId)
+    const displayName = await getDisplayName(userId)
+
+    // Return the group we just built instead of re-reading it — the SELECT
+    // policies hide rows until membership becomes visible, so a follow-up
+    // read can return null even though the writes succeeded.
+    // Best-effort refresh: if the row is already visible, return full state.
+    const reloaded = await loadGroupWithMembers(newGroupId)
+    if (reloaded) return reloaded
+    return {
+      id: newGroupId,
+      inviteCode,
+      createdBy: userId,
+      members: [{ userId, displayName, avatarUrl: null, role: 'owner' }],
+    }
+  } catch (err) {
+    lastGroupProvisionError = err instanceof Error ? err.message : String(err)
+    return null
+  }
 }
 
 export interface DarnaDuoInteractionPatch {

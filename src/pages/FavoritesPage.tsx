@@ -16,6 +16,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useLocale } from '@/i18n'
 import { cn } from '@/lib/utils'
 import {
+  createGroup,
   fetchSharedInteractions,
   fetchUserGroup,
   joinGroupByCode,
@@ -27,6 +28,8 @@ import {
   type SharedReaction,
   type VisitStatus,
 } from '@/services/collaborativeFavoritesApi'
+import { fetchPropertiesByIds } from '@/services/api'
+import type { Property } from '@/types'
 
 type FavoritesTab = 'private' | 'shared'
 
@@ -49,6 +52,9 @@ export function FavoritesPage() {
   const [tab, setTab] = useState<FavoritesTab>('private')
   const [group, setGroup] = useState<SharedGroup | null>(null)
   const [entries, setEntries] = useState<SharedPropertyEntry[]>([])
+  // Property rows for shared ids, fetched directly from the `properties`
+  // table by id — covers shared items missing from the paginated feed.
+  const [sharedDetails, setSharedDetails] = useState<Property[]>([])
   const [sharedLoading, setSharedLoading] = useState(false)
   const [sharedError, setSharedError] = useState<string | null>(null)
   const [joinError, setJoinError] = useState<string | null>(null)
@@ -69,12 +75,24 @@ export function FavoritesPage() {
     setSharedLoading(true)
     setSharedError(null)
     try {
+      // 1) Fetch the current group.
       const g = await fetchUserGroup()
       setGroup(g)
-      if (g) {
-        setEntries(await fetchSharedInteractions(g.id))
-      } else {
-        setEntries([])
+      if (!g) {
+        setEntries((prev) => (prev.length === 0 ? [] : prev))
+        return
+      }
+      // 2) Query shared_favorite_items for that group_id.
+      const fresh = await fetchSharedInteractions(g.id)
+      // 3) Update state immediately — never let a failed sync ([]) wipe
+      // already-loaded entries.
+      setEntries((prev) => (fresh.length > 0 || prev.length === 0 ? fresh : prev))
+      const effective = fresh.length > 0 ? fresh : null
+      // 4) Query property details matching the property_id list.
+      if (effective && effective.length > 0) {
+        const ids = effective.map((e) => e.propertyId)
+        const rows = await fetchPropertiesByIds(ids)
+        if (rows.length > 0) setSharedDetails(rows)
       }
     } catch {
       setSharedError(
@@ -95,21 +113,36 @@ export function FavoritesPage() {
     }
   }, [user?.id, refreshShared])
 
-  // Refetch shared entries whenever the Duo tab becomes active, so a toggle
-  // made on a listing card is reflected immediately instead of showing a
-  // stale (possibly empty) list after a success toast. A failed background
-  // sync returns [] — never let that wipe already-loaded entries.
+  // When the "Darna Duo" (shared) tab is selected: fetch the current
+  // group, query shared_favorite_items for that group_id, then query
+  // property details matching the property_id list. Updates state
+  // immediately; a failed sync ([]) never overwrites loaded entries.
   useEffect(() => {
-    if (tab !== 'shared' || !user?.id || !group?.id) return
+    if (tab !== 'shared' || !user?.id) return
     let cancelled = false
     void (async () => {
       setSharedLoading(true)
       try {
-        const fresh = await fetchSharedInteractions(group.id)
-        if (!cancelled) {
-          setEntries((prev) =>
-            fresh.length > 0 || prev.length === 0 ? fresh : prev
-          )
+        // 1) Fetch the current group fresh (not stale state).
+        const g = await fetchUserGroup()
+        if (cancelled) return
+        if (g) setGroup(g)
+        const gid = g?.id ?? group?.id
+        if (!gid) return
+        // 2) Query shared_favorite_items for that group_id.
+        const fresh = await fetchSharedInteractions(gid)
+        if (cancelled) return
+        // 3) Update state immediately — guard against empty overwrite.
+        let effective: SharedPropertyEntry[] | null = null
+        setEntries((prev) => {
+          effective = fresh.length > 0 || prev.length === 0 ? fresh : prev
+          return effective
+        })
+        // 4) Query property details for the fetched property_id list.
+        const ids = (effective ?? fresh).map((e) => e.propertyId)
+        if (ids.length > 0) {
+          const rows = await fetchPropertiesByIds(ids)
+          if (!cancelled && rows.length > 0) setSharedDetails(rows)
         }
       } finally {
         if (!cancelled) setSharedLoading(false)
@@ -118,7 +151,7 @@ export function FavoritesPage() {
     return () => {
       cancelled = true
     }
-  }, [tab, user?.id, group?.id])
+  }, [tab, user?.id])
 
   // Join via invite link: /favorites?join=CODE (legacy, auto-joins)
   useEffect(() => {
@@ -136,7 +169,14 @@ export function FavoritesPage() {
       }
       if (result.status === 'joined' && g) {
         setGroup(g)
-        setEntries(await fetchSharedInteractions(g.id))
+        const fresh = await fetchSharedInteractions(g.id)
+        if (!cancelled) {
+          setEntries((prev) => (fresh.length > 0 || prev.length === 0 ? fresh : prev))
+          if (fresh.length > 0) {
+            const rows = await fetchPropertiesByIds(fresh.map((e) => e.propertyId))
+            if (rows.length > 0) setSharedDetails(rows)
+          }
+        }
         setTab('shared')
         setSearchParams({}, { replace: true })
       } else {
@@ -223,11 +263,19 @@ export function FavoritesPage() {
     setSchedulerProperty({ propertyId, title })
   }
 
+  const handleCreateGroup = useCallback(async () => {
+    const g = await createGroup()
+    if (g) {
+      setGroup(g)
+      await refreshShared()
+    }
+  }, [refreshShared])
+
   const handleToggleShared = async (propertyId: string) => {
     if (!user?.id) return
     let activeGroup = group
     if (!activeGroup) {
-      activeGroup = await fetchUserGroup()
+      activeGroup = (await fetchUserGroup()) ?? (await createGroup())
       if (!activeGroup) return
       setGroup(activeGroup)
     }
@@ -251,6 +299,16 @@ export function FavoritesPage() {
             for (const e of fresh) merged.set(e.propertyId, e)
             return [...merged.values()]
           })
+          // Ensure property details for the new id are available even when
+          // the card is absent from the paginated feed.
+          const rows = await fetchPropertiesByIds([created.propertyId])
+          if (rows.length > 0) {
+            setSharedDetails((prev) => {
+              const merged = new Map(prev.map((p) => [p.id, p]))
+              for (const r of rows) merged.set(r.id, r)
+              return [...merged.values()]
+            })
+          }
         }
       }
     } finally {
@@ -268,7 +326,12 @@ export function FavoritesPage() {
     }
     if (result.status === 'joined' && g) {
       setGroup(g)
-      setEntries(await fetchSharedInteractions(g.id))
+      const fresh = await fetchSharedInteractions(g.id)
+      setEntries((prev) => (fresh.length > 0 || prev.length === 0 ? fresh : prev))
+      if (fresh.length > 0) {
+        const rows = await fetchPropertiesByIds(fresh.map((e) => e.propertyId))
+        if (rows.length > 0) setSharedDetails(rows)
+      }
       setTab('shared')
       setPendingDuo(null)
       setSearchParams({}, { replace: true })
@@ -285,18 +348,27 @@ export function FavoritesPage() {
 
   const favoriteProperties = properties.filter((p) => favorites.includes(p.id))
   const sharedIds = new Set(entries.map((e) => e.propertyId))
+  // Combine the paginated feed with rows fetched directly from the
+  // `properties` table by id, so shared items are never dropped when absent
+  // from the feed page.
+  const allSharedCandidates = useMemo(() => {
+    const merged = new Map<string, Property>()
+    for (const p of properties) merged.set(p.id, p)
+    for (const p of sharedDetails) merged.set(p.id, p)
+    return [...merged.values()]
+  }, [properties, sharedDetails])
   const sharedProperties = entries
     .map((entry) => ({
       entry,
-      property: properties.find((p) => p.id === entry.propertyId) ?? null,
+      property: allSharedCandidates.find((p) => p.id === entry.propertyId) ?? null,
     }))
     .filter((x) => x.property !== null)
   const addableFavorites = favoriteProperties.filter((p) => !sharedIds.has(p.id))
 
   // Properties map for activity timeline
   const propertiesMap = useMemo(
-    () => new Map(properties.map((p) => [p.id, { title: p.title }])),
-    [properties]
+    () => new Map(allSharedCandidates.map((p) => [p.id, { title: p.title }])),
+    [allSharedCandidates]
   )
 
   // Upcoming visits (to_visit status with visitAt in the future)
@@ -304,7 +376,7 @@ export function FavoritesPage() {
     const now = new Date()
     return entries
       .map((entry) => {
-        const property = properties.find((p) => p.id === entry.propertyId)
+        const property = allSharedCandidates.find((p) => p.id === entry.propertyId)
         if (!property || entry.visitStatus !== 'to_visit' || !entry.visitAt) return null
         const visitDate = new Date(entry.visitAt)
         if (visitDate < now) return null
@@ -312,7 +384,7 @@ export function FavoritesPage() {
       })
       .filter((x): x is { entry: SharedPropertyEntry; property: typeof properties[0]; visitDate: Date } => x !== null)
       .sort((a, b) => a.visitDate.getTime() - b.visitDate.getTime())
-  }, [entries, properties])
+  }, [entries, allSharedCandidates])
 
   const tabBtn = (active: boolean) =>
     cn(
@@ -390,7 +462,7 @@ export function FavoritesPage() {
                 ownInviteCode={profile?.invite_code ?? group?.inviteCode ?? null}
                 loading={sharedLoading}
                 joinError={joinError}
-                onCreate={() => void refreshShared()}
+                onCreate={() => void handleCreateGroup()}
                 onJoin={handleJoin}
               />
               {sharedError && (

@@ -449,11 +449,19 @@ export async function fetchFavoriteProperties(userId: string): Promise<Property[
   const ids = await getFavoriteIds(userId)
   if (ids.length === 0) return []
 
+  return fetchPropertiesByIds(ids)
+}
+
+/** Fetch full property rows matching an explicit id list (shared/Duo tab). */
+export async function fetchPropertiesByIds(ids: string[]): Promise<Property[]> {
+  const unique = [...new Set(ids.filter(Boolean))]
+  if (unique.length === 0) return []
+
   // select('*') avoids 42703 from column drift (daira/is_verified).
-  const { data, error } = await supabase.from('properties').select('*').in('id', ids)
+  const { data, error } = await supabase.from('properties').select('*').in('id', unique)
 
   if (error) {
-    console.error('Error fetching favorite properties:', error)
+    console.error('Error fetching properties by ids:', error)
     return []
   }
 
