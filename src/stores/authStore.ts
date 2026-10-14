@@ -239,7 +239,7 @@ export const useAuthStore = create<AuthState>()(
                 .from('profiles')
                 .select('*')
                 .eq('id', session.user.id)
-                .single()
+                .maybeSingle()
 
               set({
                 user: session.user,
@@ -260,7 +260,7 @@ export const useAuthStore = create<AuthState>()(
                   .from('profiles')
                   .select('*')
                   .eq('id', newSession.user.id)
-                  .single()
+                  .maybeSingle()
 
                 set({
                   user: newSession.user,
@@ -407,7 +407,7 @@ export const useAuthStore = create<AuthState>()(
               .from('profiles')
               .select('*')
               .eq('id', data.user.id)
-              .single()
+              .maybeSingle()
 
             set({
               user: data.user,

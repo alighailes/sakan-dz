@@ -116,7 +116,7 @@ async function getDisplayName(userId: string): Promise<string> {
       .from('profiles')
       .select('full_name')
       .eq('id', userId)
-      .single()
+      .maybeSingle()
     const name = (data as { full_name?: unknown } | null)?.full_name
     if (typeof name === 'string' && name.trim()) return name.trim()
   } catch {
@@ -149,7 +149,7 @@ async function loadGroupWithMembers(groupId: string): Promise<SharedGroup | null
     .from('shared_favorite_groups')
     .select('id, invite_code, created_by')
     .eq('id', groupId)
-    .single()
+    .maybeSingle()
   if (groupError || !group) return null
 
   const rows = await fetchMemberRows(groupId)
@@ -339,9 +339,13 @@ async function addMemberToGroup(groupId: string, userId: string): Promise<void> 
     )
     membersSchema = 'minimal'
   }
-  await supabase
+  const { error: minimalError } = await supabase
     .from('shared_favorite_members')
     .upsert({ group_id: groupId, user_id: userId }, { onConflict: 'group_id,user_id' })
+  if (minimalError) {
+    lastGroupProvisionError = minimalError.message
+    console.error('[collaborativeFavoritesApi] member upsert (minimal) failed:', minimalError)
+  }
 }
 
 async function createGroupForOwner(ownerId: string): Promise<string | null> {
@@ -762,6 +766,181 @@ export interface DuoToggleResult {
 /** Read the last group-provisioning failure for diagnostics. */
 export function getLastDuoGroupError(): string | null {
   return lastGroupProvisionError
+}
+
+/* ------------------------------------------------------------------ */
+/* Darna Duo Match & Notes System — per-member interactions.            */
+/* Primary store: `shared_property_interactions` (one row per           */
+/* group/member/property). Graceful fallback: [] / null when the table  */
+/* is not migrated yet — the shared list still renders.                */
+/*                                                                     */
+/* Expected table (run once in Supabase when ready):                   */
+/*   create table if not exists shared_property_interactions (          */
+/*     group_id uuid references shared_favorite_groups(id) on delete   */
+/*       cascade not null,                                             */
+/*     property_id uuid references properties(id) on delete cascade    */
+/*       not null,                                                     */
+/*     user_id uuid references auth.users(id) on delete cascade        */
+/*       not null,                                                     */
+/*     reaction text check (reaction in ('love','considering','pass')), */
+/*     note text not null default '',                                  */
+/*     updated_at timestamptz not null default now(),                  */
+/*     primary key (group_id, property_id, user_id)                    */
+/*   );                                                                */
+/* ------------------------------------------------------------------ */
+
+/** Duo reactions: 'love' (ممتاز) / 'considering' (نفكر فيه) / 'pass' (استبعاد). */
+export type DuoReaction = 'love' | 'considering' | 'pass'
+
+/** Back-compat alias for the previous Decision-Hub naming. */
+export type DuoDecisionReaction = DuoReaction
+
+export interface PropertyInteraction {
+  group_id: string
+  property_id: string
+  user_id: string
+  reaction: DuoReaction | null
+  note: string
+  updated_at: string
+}
+
+/** Back-compat payload shape (spec payload is { reaction?, note? }). */
+export interface UpsertInteractionInput {
+  reaction?: DuoReaction | null
+  note?: string
+}
+
+const VALID_DUO_REACTIONS: readonly string[] = ['love', 'considering', 'pass']
+
+function toDuoReaction(value: unknown): DuoReaction | null {
+  return typeof value === 'string' && VALID_DUO_REACTIONS.includes(value)
+    ? (value as DuoReaction)
+    : null
+}
+
+/** Map a legacy reaction onto the 3-way decision (best effort, for seeding). */
+export function legacyToDuoReaction(reaction: SharedReaction | null): DuoReaction | null {
+  if (reaction === 'love') return 'love'
+  if (reaction === 'thinking') return 'considering'
+  if (reaction === 'sad' || reaction === 'skeptical') return 'pass'
+  return null
+}
+
+function mapInteractionRow(row: Record<string, unknown>): PropertyInteraction | null {
+  const property_id = String(row.property_id ?? '')
+  const user_id = String(row.user_id ?? '')
+  if (!property_id || !user_id) return null
+  return {
+    group_id: String(row.group_id ?? ''),
+    property_id,
+    user_id,
+    reaction: toDuoReaction(row.reaction),
+    note: typeof row.note === 'string' ? row.note : '',
+    updated_at:
+      typeof row.updated_at === 'string' && row.updated_at ? row.updated_at : '',
+  }
+}
+
+/** Fetch all per-member interactions for a group. [] on missing table. */
+export async function fetchGroupInteractions(
+  groupId: string
+): Promise<PropertyInteraction[]> {
+  try {
+    if (!groupId) return []
+    const { data, error } = await supabase
+      .from('shared_property_interactions')
+      .select('group_id, property_id, user_id, reaction, note, updated_at')
+      .eq('group_id', groupId)
+    if (error || !data) return []
+    return (data as unknown as Record<string, unknown>[])
+      .map(mapInteractionRow)
+      .filter((r): r is PropertyInteraction => r !== null)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Fetch per-member interactions for a single property.
+ * Returns [] when the table is unavailable (callers treat as "unknown").
+ */
+export async function fetchPropertyInteractions(
+  groupId: string,
+  propertyId: string
+): Promise<PropertyInteraction[]> {
+  try {
+    if (!groupId || !propertyId) return []
+    const { data, error } = await supabase
+      .from('shared_property_interactions')
+      .select('group_id, property_id, user_id, reaction, note, updated_at')
+      .eq('group_id', groupId)
+      .eq('property_id', propertyId)
+    if (error || !data) return []
+    return (data as unknown as Record<string, unknown>[])
+      .map(mapInteractionRow)
+      .filter((r): r is PropertyInteraction => r !== null)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Upsert the current member's reaction / note for a property.
+ * Returns the written interaction row, or null when the table is
+ * unavailable. Callers apply optimistic UI and revert on null.
+ */
+export async function upsertPropertyInteraction(
+  groupId: string,
+  propertyId: string,
+  payload: { reaction?: DuoReaction | null; note?: string } = {}
+): Promise<PropertyInteraction | null> {
+  try {
+    const { data: userData } = await supabase.auth.getUser()
+    const userId = userData.user?.id ?? null
+    if (!groupId || !propertyId || !userId) return null
+    if (payload.reaction === undefined && payload.note === undefined) return null
+
+    const row: Record<string, unknown> = {
+      group_id: groupId,
+      property_id: propertyId,
+      user_id: userId,
+      updated_at: new Date().toISOString(),
+    }
+    if (payload.reaction !== undefined) row.reaction = payload.reaction
+    if (payload.note !== undefined) row.note = payload.note
+
+    const { data, error } = await supabase
+      .from('shared_property_interactions')
+      .upsert(row, { onConflict: 'group_id,property_id,user_id' })
+      .select()
+      .maybeSingle()
+    if (error || !data) return null
+    return (
+      mapInteractionRow(data as unknown as Record<string, unknown>) ?? null
+    )
+  } catch {
+    return null
+  }
+}
+
+/**
+ * "Mutual Match" — true when at least two distinct members both reacted
+ * with 'love' on the same property.
+ */
+export function isMutualMatch(interactions: PropertyInteraction[]): boolean {
+  const lovers = new Set<string>()
+  for (const i of interactions) {
+    if (i.reaction === 'love' && i.user_id) lovers.add(i.user_id)
+  }
+  return lovers.size >= 2
+}
+
+/** Convenience overload for controlled UI state (my + partner reaction). */
+export function isDuoMutualMatch(
+  myReaction: DuoReaction | null,
+  partnerReaction: DuoReaction | null
+): boolean {
+  return myReaction === 'love' && partnerReaction === 'love'
 }
 
 /** Whether the property is in the group and was added by this user. */

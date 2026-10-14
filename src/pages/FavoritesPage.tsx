@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { DarnaDuoHeader } from '@/components/darnaDuo/DarnaDuoHeader'
 import { ReactionPicker } from '@/components/darnaDuo/ReactionPicker'
 import { SharedNotesBadge } from '@/components/darnaDuo/SharedNotesBadge'
+import { DuoInteractionBar } from '@/components/darnaDuo/DuoInteractionBar'
 import { VisitSchedulerModal } from '@/components/darnaDuo/VisitSchedulerModal'
 import { DarnaActivityTimeline } from '@/components/darnaDuo/DarnaActivityTimeline'
 import { useProperties } from '@/hooks/useProperties'
@@ -17,12 +18,16 @@ import { useLocale } from '@/i18n'
 import { cn } from '@/lib/utils'
 import {
   createGroup,
+  fetchGroupInteractions,
   fetchSharedInteractions,
   fetchUserGroup,
   joinGroupByCode,
   removeSharedProperty,
   toggleSharedProperty,
+  upsertPropertyInteraction,
+  type DuoReaction,
   type DuoJoinStatus,
+  type PropertyInteraction,
   type SharedGroup,
   type SharedPropertyEntry,
   type SharedReaction,
@@ -62,6 +67,11 @@ export function FavoritesPage() {
   const [actionId, setActionId] = useState<string | null>(null)
   const [schedulerProperty, setSchedulerProperty] = useState<{ propertyId: string; title: string } | null>(null)
   const [schedulerLoading, setSchedulerLoading] = useState(false)
+  // Darna Duo Match & Notes: per-member interactions from
+  // `shared_property_interactions`. [] when the table is unavailable.
+  const [interactions, setInteractions] = useState<PropertyInteraction[]>([])
+  const [duoFilter, setDuoFilter] = useState<'all' | 'matched'>('all')
+  const [duoSavingId, setDuoSavingId] = useState<string | null>(null)
 
   // Pull the logged-in user's live favorites from Supabase
   useEffect(() => {
@@ -82,11 +92,15 @@ export function FavoritesPage() {
         setEntries((prev) => (prev.length === 0 ? [] : prev))
         return
       }
-      // 2) Query shared_favorite_items for that group_id.
-      const fresh = await fetchSharedInteractions(g.id)
+      // 2) Query shared_favorite_items + per-member interactions together.
+      const [fresh, duo] = await Promise.all([
+        fetchSharedInteractions(g.id),
+        fetchGroupInteractions(g.id),
+      ])
       // 3) Update state immediately — never let a failed sync ([]) wipe
-      // already-loaded entries.
+      // already-loaded entries. Interactions fall back to [] gracefully.
       setEntries((prev) => (fresh.length > 0 || prev.length === 0 ? fresh : prev))
+      setInteractions(duo)
       const effective = fresh.length > 0 ? fresh : null
       // 4) Query property details matching the property_id list.
       if (effective && effective.length > 0) {
@@ -129,8 +143,11 @@ export function FavoritesPage() {
         if (g) setGroup(g)
         const gid = g?.id ?? group?.id
         if (!gid) return
-        // 2) Query shared_favorite_items for that group_id.
-        const fresh = await fetchSharedInteractions(gid)
+        // 2) Query shared_favorite_items + per-member interactions together.
+        const [fresh, duo] = await Promise.all([
+          fetchSharedInteractions(gid),
+          fetchGroupInteractions(gid),
+        ])
         if (cancelled) return
         // 3) Update state immediately — guard against empty overwrite.
         let effective: SharedPropertyEntry[] | null = null
@@ -138,6 +155,7 @@ export function FavoritesPage() {
           effective = fresh.length > 0 || prev.length === 0 ? fresh : prev
           return effective
         })
+        setInteractions(duo)
         // 4) Query property details for the fetched property_id list.
         const ids = (effective ?? fresh).map((e) => e.propertyId)
         if (ids.length > 0) {
@@ -239,6 +257,147 @@ export function FavoritesPage() {
     }
   }
 
+  const interactionsByProperty = useMemo(() => {
+    const map = new Map<string, PropertyInteraction[]>()
+    for (const i of interactions) {
+      const list = map.get(i.property_id) ?? []
+      list.push(i)
+      map.set(i.property_id, list)
+    }
+    return map
+  }, [interactions])
+
+  const isMatched = (propertyId: string): boolean => {
+    const list = interactionsByProperty.get(propertyId) ?? []
+    const lovers = new Set(
+      list.filter((i) => i.reaction === 'love').map((i) => i.user_id)
+    )
+    return lovers.size >= 2
+  }
+
+  const matchCount = useMemo(() => {
+    let n = 0
+    for (const [, list] of interactionsByProperty) {
+      const lovers = new Set(
+        list.filter((i) => i.reaction === 'love').map((i) => i.user_id)
+      )
+      if (lovers.size >= 2) n += 1
+    }
+    return n
+  }, [interactionsByProperty])
+
+  const getMine = (propertyId: string): PropertyInteraction | undefined =>
+    interactionsByProperty.get(propertyId)?.find((i) => i.user_id === user?.id)
+
+  const getPartner = (propertyId: string): PropertyInteraction | undefined =>
+    interactionsByProperty.get(propertyId)?.find((i) => i.user_id !== user?.id)
+
+  const handleDuoReaction = async (propertyId: string, reaction: DuoReaction) => {
+    if (!group?.id || !user?.id || duoSavingId === propertyId) return
+    const prevList = interactionsByProperty.get(propertyId) ?? []
+    const prevMine = prevList.find((i) => i.user_id === user.id)
+    const prevReaction = prevMine?.reaction ?? null
+    const next: DuoReaction | null = prevReaction === reaction ? null : reaction
+    const now = new Date().toISOString()
+    // Optimistic update.
+    setInteractions((list) => {
+      const others = list.filter(
+        (i) => !(i.property_id === propertyId && i.user_id === user.id)
+      )
+      return [
+        ...others,
+        {
+          group_id: group.id,
+          property_id: propertyId,
+          user_id: user.id,
+          reaction: next,
+          note: prevMine?.note ?? '',
+          updated_at: now,
+        },
+      ]
+    })
+    setDuoSavingId(propertyId)
+    try {
+      const written = await upsertPropertyInteraction(group.id, propertyId, {
+        reaction: next,
+      })
+      if (written) {
+        setInteractions((list) => {
+          const others = list.filter(
+            (i) => !(i.property_id === propertyId && i.user_id === written.user_id)
+          )
+          return [...others, written]
+        })
+      } else if (prevMine) {
+        // Revert on failure; drop the optimistic row when none existed.
+        setInteractions((list) => {
+          const others = list.filter(
+            (i) => !(i.property_id === propertyId && i.user_id === user.id)
+          )
+          return prevMine ? [...others, prevMine] : others
+        })
+      } else {
+        setInteractions((list) =>
+          list.filter(
+            (i) => !(i.property_id === propertyId && i.user_id === user.id)
+          )
+        )
+      }
+    } finally {
+      setDuoSavingId((id) => (id === propertyId ? null : id))
+    }
+  }
+
+  const handleDuoNoteSave = async (propertyId: string, note: string) => {
+    if (!group?.id || !user?.id) return
+    const prevMine = getMine(propertyId)
+    if ((prevMine?.note ?? '').trim() === note.trim()) return
+    const now = new Date().toISOString()
+    setInteractions((list) => {
+      const others = list.filter(
+        (i) => !(i.property_id === propertyId && i.user_id === user.id)
+      )
+      return [
+        ...others,
+        {
+          group_id: group.id,
+          property_id: propertyId,
+          user_id: user.id,
+          reaction: prevMine?.reaction ?? null,
+          note,
+          updated_at: now,
+        },
+      ]
+    })
+    setDuoSavingId(propertyId)
+    try {
+      const written = await upsertPropertyInteraction(group.id, propertyId, { note })
+      if (written) {
+        setInteractions((list) => {
+          const others = list.filter(
+            (i) => !(i.property_id === propertyId && i.user_id === written.user_id)
+          )
+          return [...others, written]
+        })
+      } else if (prevMine) {
+        setInteractions((list) => {
+          const others = list.filter(
+            (i) => !(i.property_id === propertyId && i.user_id === user.id)
+          )
+          return [...others, prevMine]
+        })
+      } else {
+        setInteractions((list) =>
+          list.filter(
+            (i) => !(i.property_id === propertyId && i.user_id === user.id)
+          )
+        )
+      }
+    } finally {
+      setDuoSavingId((id) => (id === propertyId ? null : id))
+    }
+  }
+
   const handleScheduleVisit = async (visitAt: string, notes: string) => {
     if (!group || !user?.id || !schedulerProperty) return
     setSchedulerLoading(true)
@@ -326,8 +485,12 @@ export function FavoritesPage() {
     }
     if (result.status === 'joined' && g) {
       setGroup(g)
-      const fresh = await fetchSharedInteractions(g.id)
+      const [fresh, duo] = await Promise.all([
+        fetchSharedInteractions(g.id),
+        fetchGroupInteractions(g.id),
+      ])
       setEntries((prev) => (fresh.length > 0 || prev.length === 0 ? fresh : prev))
+      setInteractions(duo)
       if (fresh.length > 0) {
         const rows = await fetchPropertiesByIds(fresh.map((e) => e.propertyId))
         if (rows.length > 0) setSharedDetails(rows)
@@ -363,6 +526,14 @@ export function FavoritesPage() {
       property: allSharedCandidates.find((p) => p.id === entry.propertyId) ?? null,
     }))
     .filter((x) => x.property !== null)
+    .filter((x) => {
+      if (duoFilter !== 'matched' || !x.property) return true
+      const list = interactionsByProperty.get(x.property.id) ?? []
+      const lovers = new Set(
+        list.filter((i) => i.reaction === 'love').map((i) => i.user_id)
+      )
+      return lovers.size >= 2
+    })
   const addableFavorites = favoriteProperties.filter((p) => !sharedIds.has(p.id))
 
   // Properties map for activity timeline
@@ -488,6 +659,37 @@ export function FavoritesPage() {
                 />
               ) : (
                 <>
+                  {/* Match filter: All vs mutual matches */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDuoFilter('all')}
+                      className={tabBtn(duoFilter === 'all')}
+                    >
+                      {locale === 'ar' ? 'الكل' : 'Tout'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDuoFilter('matched')}
+                      className={tabBtn(duoFilter === 'matched')}
+                    >
+                      {locale === 'ar'
+                        ? `🔥 متفق عليها (${matchCount})`
+                        : `🔥 Matchs (${matchCount})`}
+                    </button>
+                  </div>
+                  {duoFilter === 'matched' && sharedProperties.length === 0 ? (
+                    <EmptyState
+                      icon={Heart}
+                      title={locale === 'ar' ? 'لا توجد عقارات متفق عليها بعد' : 'Aucun match pour le moment'}
+                      description={
+                        locale === 'ar'
+                          ? 'عندما تحب أنت وشريكك نفس العقار (🔥) سيظهر هنا.'
+                          : 'Quand vous aimez le même bien (🔥), il apparaîtra ici.'
+                      }
+                    />
+                  ) : (
+                  <>
                   {/* Upcoming Visits */}
                   {upcomingVisits.length > 0 && (
                     <div className="mb-5 rounded-2xl border border-sky-200 bg-sky-50/60 p-4 shadow-sm backdrop-blur-xl dark:border-sky-900/40 dark:bg-sky-950/20">
@@ -548,6 +750,8 @@ export function FavoritesPage() {
                       group?.members.find((m) => m.userId === entry.reactionBy)?.displayName ??
                       group?.members.find((m) => m.userId !== user.id)?.displayName ??
                       null
+                    const mine = getMine(property.id)
+                    const partner = getPartner(property.id)
                     return (
                       <div
                         key={property.id}
@@ -575,6 +779,19 @@ export function FavoritesPage() {
                           />
                         </div>
                         <div className="px-1 pb-1">
+                          <DuoInteractionBar
+                            myReaction={mine?.reaction ?? null}
+                            partnerReaction={partner?.reaction ?? null}
+                            partnerNote={partner?.note ?? ''}
+                            mutualMatch={isMatched(property.id)}
+                            initialNote={mine?.note ?? ''}
+                            disabled={duoSavingId === property.id || actionId === property.id}
+                            saving={duoSavingId === property.id}
+                            onReaction={(r) => void handleDuoReaction(property.id, r)}
+                            onNoteSave={(note) => void handleDuoNoteSave(property.id, note)}
+                          />
+                        </div>
+                        <div className="px-1 pb-1">
                           <Button
                             variant="ghost"
                             size="sm"
@@ -594,6 +811,8 @@ export function FavoritesPage() {
                     )
                   })}
                 </div>
+                  </>
+                  )}
               </>)}
 
               {/* Add private favorites into the shared group */}
@@ -633,7 +852,7 @@ export function FavoritesPage() {
         <VisitSchedulerModal
           isOpen
           onClose={() => setSchedulerProperty(null)}
-          property={{ id: schedulerProperty.propertyId, title: schedulerProperty.title } as any}
+          property={{ id: schedulerProperty.propertyId, title: schedulerProperty.title }}
           onSchedule={handleScheduleVisit}
           loading={schedulerLoading}
         />

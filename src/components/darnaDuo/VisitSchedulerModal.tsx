@@ -4,7 +4,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useLocale } from '@/i18n'
-import type { Property } from '@/types'
+
+/** Minimal property shape the scheduler actually reads (no full Property needed). */
+export interface SchedulerProperty {
+  id: string
+  title: string
+  address?: string
+  commune?: string
+}
 
 const TIME_SLOTS = [
   '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
@@ -16,7 +23,7 @@ const TIME_SLOTS = [
 interface VisitSchedulerModalProps {
   isOpen: boolean
   onClose: () => void
-  property: Property
+  property: SchedulerProperty
   onSchedule: (visitAt: string, notes: string) => void
   loading?: boolean
 }

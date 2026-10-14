@@ -24,18 +24,14 @@ export const useSearchStore = create<SearchState>((set) => ({
           (newFilters as Record<string, unknown>)[key] = value
         }
       })
-      console.log('searchStore - setFilters called with:', filters)
-      console.log('searchStore - new filters:', newFilters)
       return { filters: newFilters }
     }),
   resetFilters: () => {
-    console.log('searchStore - resetFilters called')
     set({ filters: defaultFilters })
   },
   activeOperation: undefined,
   setActiveOperation: (op) =>
     set((state) => {
-      console.log('searchStore - setActiveOperation called with:', op)
       return {
         activeOperation: op,
         filters: { ...state.filters, operationType: op },

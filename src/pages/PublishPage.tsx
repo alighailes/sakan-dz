@@ -111,7 +111,7 @@ export function PublishPage() {
           .from('profiles')
           .select('phone_number')
           .eq('id', user.id)
-          .single()
+          .maybeSingle()
         if (cancelled) return
         const fetched = (data as { phone_number?: string } | null)?.phone_number?.trim()
         if (fetched) setPhone(fetched)

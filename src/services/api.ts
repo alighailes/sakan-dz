@@ -296,7 +296,7 @@ async function fetchPropertiesUncached(filters?: SearchFilters, options?: FetchP
 
 /** Fetch a single property by id, joined with its publisher profile. */
 export async function fetchPropertyById(id: string): Promise<{ property: Property | null; publisherName: string | null }> {
-  const { data, error } = await supabase.from('properties').select('*').eq('id', id).single()
+  const { data, error } = await supabase.from('properties').select('*').eq('id', id).maybeSingle()
 
   if (error || !data) {
     console.error('Error fetching property:', error)
@@ -311,7 +311,7 @@ export async function fetchPropertyById(id: string): Promise<{ property: Propert
       .from('profiles')
       .select('full_name')
       .eq('id', property.ownerId)
-      .single()
+      .maybeSingle()
     if (profile && typeof (profile as Record<string, unknown>).full_name === 'string') {
       publisherName = (profile as Record<string, unknown>).full_name as string
     }
@@ -370,8 +370,6 @@ export async function fetchAgents(wilaya?: string): Promise<Agent[]> {
     }
 
     const { data, error } = await query.order('created_at', { ascending: false }).limit(50)
-
-    console.log('Fetched agents raw data:', data, error)
 
     if (error) {
       console.error('Error fetching agents from Supabase:', error)

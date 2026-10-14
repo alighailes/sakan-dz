@@ -11,7 +11,6 @@ export function ListingsPage() {
 
   // Sync URL query parameters into the search store on mount and when they change
   useEffect(() => {
-    console.log('ListingsPage - URL params changed:', Object.fromEntries(searchParams.entries()))
     const filters: Record<string, unknown> = {}
 
     const q = searchParams.get('q')
@@ -41,7 +40,6 @@ export function ListingsPage() {
     const bedrooms = searchParams.get('bedrooms')
     if (bedrooms) filters.minBedrooms = Number(bedrooms)
 
-    console.log('ListingsPage - setting filters from URL:', filters)
     setFilters(filters)
   }, [searchParams, setFilters, setActiveOperation])
 
